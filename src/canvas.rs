@@ -10,7 +10,12 @@ use crate::gl::OpenGlCanvas;
 #[derive(Default, NwgUi)]
 pub struct Canvas {
     #[nwg_control(size: (600, 500), position: (300, 300), title: "nwg/ogl", flags: "MAIN_WINDOW")]
-    #[nwg_events(OnInit: [Canvas::show], OnWindowClose: [Canvas::exit], OnResize: [Canvas::resize_canvas])]
+    #[nwg_events(
+        OnInit: [Canvas::show],
+        OnWindowClose: [Canvas::exit],
+        OnResize: [Canvas::resize_canvas],
+        OnWindowMaximize: [Canvas::resize_canvas],
+    )]
     pub window: nwg::Window,
 
     #[nwg_layout(parent: window, max_column: Some(4), max_row: Some(8))]
