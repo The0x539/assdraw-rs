@@ -141,17 +141,3 @@ impl Canvas {
         println!("{:?}", img.dimensions());
     }
 }
-
-trait MyUnwrap {
-    fn my_unwrap(self);
-}
-
-impl<T> MyUnwrap for clipboard_win::SysResult<T> {
-    fn my_unwrap(self) {
-        match self {
-            Ok(_) => (),
-            Err(e) if e.is_zero() => (),
-            Err(e) => Err(e).unwrap(),
-        }
-    }
-}
