@@ -1,0 +1,15 @@
+[package]
+name = "assdraw-rs"
+version = "0.1.0"
+authors = ["The0x539 <the0x539@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+native-windows-gui = "1.0.10"
+native-windows-derive = "1.0.3"
+glutin = "0.26.0"
+gl = "0.14.0"
+bytemuck = "1.5.0"
+clipboard-win = "4.0.3"
+image = "0.23.12"
+
