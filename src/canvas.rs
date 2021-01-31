@@ -49,7 +49,8 @@ pub struct Canvas {
     pub paste_image_btn: nwg::Button,
 
     dragging: Cell<bool>,
-    drag_start: Cell<(i32, i32)>,
+    pre_drag_pos: Cell<[f32; 2]>,
+    drag_start_pos: Cell<(i32, i32)>,
 }
 
 impl Canvas {
@@ -59,10 +60,15 @@ impl Canvas {
 
     pub fn mouse_move(&self) {
         if self.dragging.get() {
-            let start = self.drag_start.get();
-            let pos = self.cursor_pos();
-            let delta = (pos.0 - start.0, pos.1 - start.1);
-            self.canvas.set_delta(delta);
+            let [x0, y0] = self.pre_drag_pos.get();
+            let (dx0, dy0) = self.drag_start_pos.get();
+            let (dx1, dy1) = self.cursor_pos();
+            let (dx, dy) = (dx1 - dx0, dy1 - dy0);
+            self.canvas.update_dimensions(|dims| {
+                let x = x0 + (dx as f32) / dims.scale;
+                let y = y0 + (dy as f32) / dims.scale;
+                dims.scene_pos = [x, y];
+            })
         }
     }
 
@@ -75,12 +81,13 @@ impl Canvas {
             nwg::MousePressEvent::MousePressRightDown => {
                 nwg::GlobalCursor::set_capture(&self.canvas.handle);
                 self.dragging.set(true);
-                self.drag_start.set(self.cursor_pos());
+                self.drag_start_pos.set(self.cursor_pos());
+                self.pre_drag_pos
+                    .set(self.canvas.get_dimensions().scene_pos);
             }
             nwg::MousePressEvent::MousePressRightUp => {
                 nwg::GlobalCursor::release();
                 self.dragging.set(false);
-                self.canvas.commit_delta();
             }
             _ => (),
         }
@@ -154,6 +161,8 @@ impl Canvas {
             nwg::EventData::OnMouseWheel(i) => 1.25_f32.powf(*i as f32 / 120.0),
             _ => panic!(),
         };
-        self.canvas.scale_by(factor);
+        self.canvas.update_dimensions(|dims| {
+            dims.scale *= factor;
+        })
     }
 }

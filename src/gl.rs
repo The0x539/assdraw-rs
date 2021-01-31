@@ -15,22 +15,20 @@ mod get;
 
 type Ctx = RawContext<PossiblyCurrent>;
 
-use gl::types::{GLint, GLuint};
+use gl::types::{GLfloat, GLint, GLuint};
 
-#[derive(Default, Copy, Clone)]
-struct MiscState {
-    program: GLuint,
-    vp_pos_loc: GLint,
-    vp_size_loc: GLint,
-    offset_loc: GLint,
-    delta_loc: GLint,
-    scale_loc: GLint,
+#[derive(Default, Copy, Clone, Debug)]
+pub struct Dimensions {
+    pub screen_dims: [GLfloat; 2],
+    pub scene_pos: [GLfloat; 2],
+    pub scale: GLfloat,
 }
 
 #[derive(Default)]
 pub struct OpenGlCanvas {
     ctx: RefCell<Option<Ctx>>,
-    state: Cell<MiscState>,
+    program: Cell<GLuint>,
+    dimensions: Cell<Dimensions>,
     canvas: nwg::ExternCanvas,
 }
 
@@ -90,6 +88,8 @@ impl OpenGlCanvas {
             gl::LinkProgram(program);
             gl::UseProgram(program);
 
+            self.program.set(program);
+
             print!("{}", shader_info_log(vs));
             print!("{}", shader_info_log(fs));
 
@@ -120,23 +120,16 @@ impl OpenGlCanvas {
             let stride = mem::size_of::<f32>() * 2;
             gl::VertexAttribPointer(0, 2, gl::FLOAT, 0, stride as _, ptr::null());
 
-            let get_uniform = |name: &[u8]| gl::GetUniformLocation(program, name.as_ptr().cast());
-
             let mut tex = 0;
             gl::GenTextures(1, &mut tex);
             gl::BindTexture(gl::TEXTURE_RECTANGLE, tex);
 
-            let scale_loc = get_uniform(b"u_Scale\0");
-            gl::Uniform1f(scale_loc, 1.0);
-
-            self.state.set(MiscState {
-                program,
-                vp_pos_loc: get_uniform(b"u_vpPos\0"),
-                vp_size_loc: get_uniform(b"u_vpSize\0"),
-                offset_loc: get_uniform(b"u_Offset\0"),
-                delta_loc: get_uniform(b"u_Delta\0"),
-                scale_loc,
-            });
+            let default_dims = Dimensions {
+                screen_dims: [100.0, 100.0],
+                scene_pos: [0.0, 0.0],
+                scale: 1.0,
+            };
+            self.set_dimensions(default_dims);
 
             *self.ctx.borrow_mut() = Some(ctx);
         }
@@ -148,6 +141,7 @@ impl OpenGlCanvas {
 
     pub fn render(&self) {
         self.with_ctx(|ctx| unsafe {
+            get::get_errors().unwrap();
             gl::Clear(gl::COLOR_BUFFER_BIT);
             gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
             ctx.swap_buffers().unwrap();
@@ -155,38 +149,42 @@ impl OpenGlCanvas {
     }
 
     pub fn resize(&self) {
-        self.with_ctx(|ctx| unsafe {
-            let (w, h) = self.canvas.physical_size();
-            let ((vx, vy), (vw, vh)) = get::get_viewport();
-            let MiscState {
-                vp_pos_loc,
-                vp_size_loc,
-                ..
-            } = self.state.get();
-            gl::Uniform2i(vp_pos_loc, vx, vy);
-            gl::Uniform2i(vp_size_loc, vw, vh);
-            gl::Viewport(0, 0, w as i32, h as i32);
-            ctx.resize(PhysicalSize::new(w, h));
-        });
+        let (w, h) = self.canvas.physical_size();
+        self.update_dimensions(|dims| dims.screen_dims = [w as _, h as _]);
+        unsafe {
+            gl::Viewport(0, 0, w as _, h as _);
+        }
+        self.with_ctx(|ctx| ctx.resize(PhysicalSize::new(w, h)));
     }
 
-    pub fn set_delta(&self, (dx, dy): (i32, i32)) {
-        unsafe {
-            gl::Uniform2i(self.state.get().delta_loc, dx, dy);
-        }
+    pub fn get_dimensions(&self) -> Dimensions {
+        self.dimensions.get()
     }
 
-    pub fn commit_delta(&self) {
-        let state = self.state.get();
-        unsafe {
-            let mut offset = [0, 0];
-            gl::GetUniformiv(state.program, state.offset_loc, offset.as_mut_ptr().cast());
-            let mut delta = [0, 0];
-            gl::GetUniformiv(state.program, state.delta_loc, delta.as_mut_ptr().cast());
+    pub fn update_dimensions<F: FnOnce(&mut Dimensions)>(&self, f: F) {
+        let mut dims = self.dimensions.get();
+        f(&mut dims);
+        self.set_dimensions(dims);
+    }
 
-            gl::Uniform2i(state.offset_loc, offset[0] + delta[0], offset[1] + delta[1]);
-            gl::Uniform2i(state.delta_loc, 0, 0);
+    pub fn set_dimensions(&self, dims: Dimensions) {
+        self.dimensions.set(dims);
+        unsafe {
+            let prog = self.program.get();
+            let get_uniform_loc = |name: &[u8]| gl::GetUniformLocation(prog, name.as_ptr().cast());
+            gl::Uniform2f(
+                get_uniform_loc(b"u_Dims.screen_dims\0"),
+                dims.screen_dims[0],
+                dims.screen_dims[1],
+            );
+            gl::Uniform2f(
+                get_uniform_loc(b"u_Dims.scene_pos\0"),
+                dims.scene_pos[0],
+                dims.scene_pos[1],
+            );
+            gl::Uniform1f(get_uniform_loc(b"u_Dims.scale\0"), dims.scale);
         }
+        get::get_errors().unwrap();
     }
 
     pub fn set_image<'a>(&self, img: impl ImageDecoder<'a>) {
@@ -237,16 +235,6 @@ impl OpenGlCanvas {
                 vertex_data.as_ptr().cast(),
                 gl::STATIC_DRAW,
             );
-        }
-    }
-
-    pub fn scale_by(&self, factor: f32) {
-        let st = self.state.get();
-        let mut scale = 0.0;
-        unsafe {
-            gl::GetUniformfv(st.program, st.scale_loc, &mut scale);
-            scale *= factor;
-            gl::Uniform1f(st.scale_loc, scale);
         }
     }
 }

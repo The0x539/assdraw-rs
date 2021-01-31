@@ -54,6 +54,7 @@ pub unsafe fn get<T: GlGet<U>, U: Pod>(pname: GLenum) -> T {
     val
 }
 
+#[allow(unused)]
 pub fn get_viewport() -> ((i32, i32), (i32, i32)) {
     let [x, y, w, h]: [i32; 4] = unsafe { get(gl::VIEWPORT) };
     ((x, y), (w, h))

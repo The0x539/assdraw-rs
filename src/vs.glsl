@@ -1,18 +1,30 @@
 #version 330
 
+struct Dimensions {
+	vec2 screen_dims;
+	vec2 scene_pos;
+	float scale;
+};
+
+uniform Dimensions u_Dims;
+
 layout (location=0) in vec2 a_Position;
+
 out vec2 v_Position;
-
-uniform ivec2 u_vpPos;
-uniform ivec2 u_vpSize;
-
-uniform ivec2 u_Offset;
-uniform ivec2 u_Delta;
-uniform float u_Scale;
 
 void main() {
 	vec2 pos = a_Position;
 
+	pos += u_Dims.scene_pos;
+	pos /= u_Dims.screen_dims;
+	pos *= u_Dims.scale;
+
+	// top-left origin
+	pos -= 0.5;
+	pos *= 2;
+	pos.y *= -1;
+
+	/*
 	// apply offset
 	pos += u_Offset + u_Delta;
 
@@ -27,6 +39,9 @@ void main() {
 	pos.y *= -1;
 
 	pos *= u_Scale;
+	v_Position = a_Position;
+	*/
+
 	v_Position = a_Position;
 
 	gl_Position = vec4(pos, 0.0, 1.0);
