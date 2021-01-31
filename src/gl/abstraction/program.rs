@@ -4,11 +4,11 @@ use gl::types::{GLchar, GLenum, GLint, GLuint};
 
 use super::error::{check_errors, Result};
 
-pub struct AttributeLocation(GLuint);
-deref_wrap!(AttributeLocation as GLuint);
+pub struct AttributeLocation(GLint);
+deref_wrap!(AttributeLocation as GLint);
 
-pub struct UniformLocation(GLuint);
-deref_wrap!(UniformLocation as GLuint);
+pub struct UniformLocation(GLint);
+deref_wrap!(UniformLocation as GLint);
 
 pub struct Program(GLuint);
 deref_wrap!(Program as GLuint);
@@ -73,7 +73,7 @@ impl Program {
         if loc < 0 {
             Ok(None)
         } else {
-            Ok(Some(AttributeLocation(loc as _)))
+            Ok(Some(AttributeLocation(loc)))
         }
     }
 
@@ -83,7 +83,7 @@ impl Program {
         if loc < 0 {
             Ok(None)
         } else {
-            Ok(Some(UniformLocation(loc as _)))
+            Ok(Some(UniformLocation(loc)))
         }
     }
 }
