@@ -4,12 +4,15 @@ use gl::types::{GLchar, GLenum, GLint, GLuint};
 
 use super::error::{check_errors, Result};
 
+#[derive(Debug)]
 pub struct AttributeLocation(GLint);
 deref_wrap!(AttributeLocation as GLint);
 
+#[derive(Debug)]
 pub struct UniformLocation(GLint);
 deref_wrap!(UniformLocation as GLint);
 
+#[derive(Debug)]
 pub struct Program(GLuint);
 deref_wrap!(Program as GLuint);
 
