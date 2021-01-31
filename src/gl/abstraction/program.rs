@@ -1,10 +1,17 @@
-use std::ops::Deref;
+use std::ffi::CStr;
 
 use gl::types::{GLchar, GLenum, GLint, GLuint};
 
 use super::error::{check_errors, Result};
 
+pub struct AttributeLocation(GLuint);
+deref_wrap!(AttributeLocation as GLuint);
+
+pub struct UniformLocation(GLuint);
+deref_wrap!(UniformLocation as GLuint);
+
 pub struct Program(GLuint);
+deref_wrap!(Program as GLuint);
 
 impl Program {
     pub fn new() -> Self {
@@ -59,11 +66,24 @@ impl Program {
         check_errors().unwrap();
         self.link_status()
     }
-}
 
-impl Deref for Program {
-    type Target = GLuint;
-    fn deref(&self) -> &Self::Target {
-        &self.0
+    pub fn get_attrib_location(&self, name: &CStr) -> Result<Option<AttributeLocation>> {
+        let loc = unsafe { gl::GetAttribLocation(self.0, name.as_ptr().cast()) };
+        check_errors()?;
+        if loc < 0 {
+            Ok(None)
+        } else {
+            Ok(Some(AttributeLocation(loc as _)))
+        }
+    }
+
+    pub fn get_uniform_location(&self, name: &CStr) -> Result<Option<UniformLocation>> {
+        let loc = unsafe { gl::GetUniformLocation(self.0, name.as_ptr().cast()) };
+        check_errors()?;
+        if loc < 0 {
+            Ok(None)
+        } else {
+            Ok(Some(UniformLocation(loc as _)))
+        }
     }
 }
