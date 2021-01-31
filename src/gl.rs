@@ -95,9 +95,10 @@ impl OpenGlCanvas {
 
             #[rustfmt::skip]
             let vertex_data: &[f32] = &[
-                10.0, 10.0, 1.0, 1.0, 1.0,
-                10.0, 490.0, 1.0, 0.5, 1.0,
-                490.0, 10.0, 1.0, 1.0, 0.5,
+                0.0, 0.0,
+                0.0, 0.0,
+                0.0, 0.0,
+                0.0, 0.0,
             ];
 
             let mut vb = 0;
@@ -115,12 +116,9 @@ impl OpenGlCanvas {
             gl::BindVertexArray(vao);
 
             gl::EnableVertexAttribArray(0);
-            gl::EnableVertexAttribArray(1);
 
-            let stride = mem::size_of::<f32>() * 5;
-            let color_offset = 8 as *const c_void;
+            let stride = mem::size_of::<f32>() * 2;
             gl::VertexAttribPointer(0, 2, gl::FLOAT, 0, stride as _, ptr::null());
-            gl::VertexAttribPointer(1, 4, gl::FLOAT, 0, stride as _, color_offset);
 
             let get_uniform = |name: &[u8]| gl::GetUniformLocation(program, name.as_ptr().cast());
 
@@ -151,7 +149,7 @@ impl OpenGlCanvas {
     pub fn render(&self) {
         self.with_ctx(|ctx| unsafe {
             gl::Clear(gl::COLOR_BUFFER_BIT);
-            gl::DrawArrays(gl::TRIANGLES, 0, 6);
+            gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
             ctx.swap_buffers().unwrap();
         });
     }
@@ -207,23 +205,37 @@ impl OpenGlCanvas {
             .chunks_exact(3)
             .map(|rgb| {
                 let (r, g, b) = (rgb[0], rgb[1], rgb[2]);
-                use std::iter::once;
-                once(r).chain(once(g)).chain(once(b)).chain(once(255))
+                vec![127, r, g, b]
             })
             .flatten()
             .collect::<Vec<u8>>();
+
+        #[rustfmt::skip]
+        let vertex_data = &[
+            0.0, 0.0,
+            width as f32, 0.0,
+            0.0, height as f32,
+            width as f32, height as f32,
+        ];
 
         unsafe {
             gl::TexImage2D(
                 gl::TEXTURE_RECTANGLE,
                 0,
-                gl::RGBA8.try_into().unwrap(),
+                gl::RGB8 as _,
                 width as GLint,
                 height as GLint,
                 0,
-                gl::RGBA,
+                gl::BGRA,
                 gl::UNSIGNED_INT_8_8_8_8,
                 buf2.as_ptr().cast(),
+            );
+
+            gl::BufferData(
+                gl::ARRAY_BUFFER,
+                slice_size(vertex_data) as _,
+                vertex_data.as_ptr().cast(),
+                gl::STATIC_DRAW,
             );
         }
     }

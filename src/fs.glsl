@@ -2,17 +2,12 @@
 
 precision mediump float;
 
-layout(origin_upper_left) in vec4 gl_FragCoord;
-
 uniform sampler2DRect u_Texture;
 
-in vec4 color;
-in vec2 position;
+in vec2 v_Position;
 out vec4 outColor;
  
 void main() {
-	vec4 a = color;
-	vec4 b = texture(u_Texture, position);
-	vec4 c = mix(a, b, 0.5);
+	vec4 c = texture(u_Texture, v_Position);
 	outColor = c;
 }
