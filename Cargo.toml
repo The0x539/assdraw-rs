@@ -13,4 +13,5 @@ bytemuck = "1.5.0"
 clipboard-win = "4.0.3"
 image = "0.23.12"
 thiserror = "1.0.23"
+num_enum = "0.5.1"
 

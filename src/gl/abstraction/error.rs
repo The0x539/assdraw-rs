@@ -1,3 +1,4 @@
+use std::fmt::{self, Display, Formatter};
 use thiserror::Error;
 
 #[repr(u32)]
@@ -16,6 +17,23 @@ pub enum Error {
     OutOfMemory = gl::OUT_OF_MEMORY,
 }
 
+#[derive(Debug, Clone)]
+pub struct Errors(Vec<Error>);
+
+impl Display for Errors {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        if self.0.len() == 1 {
+            self.0[0].fmt(f)
+        } else {
+            let mut f = f.debug_list();
+            for e in &self.0 {
+                f.entry(&e.to_string());
+            }
+            f.finish()
+        }
+    }
+}
+
 pub fn get_error() -> Option<Error> {
     let err_flag = unsafe { gl::GetError() };
     let err = match err_flag {
@@ -27,16 +45,18 @@ pub fn get_error() -> Option<Error> {
         gl::INVALID_FRAMEBUFFER_OPERATION => Error::InvalidFramebufferOperation,
         gl::OUT_OF_MEMORY => Error::OutOfMemory,
 
-        other => panic!("Unrecognized  OpenGL error code: {}", other),
+        other => panic!("Unrecognized OpenGL error code: {}", other),
     };
     Some(err)
 }
 
-pub fn check_errors() -> Result<(), Vec<Error>> {
+pub type Result<T> = std::result::Result<T, Errors>;
+
+pub fn check_errors() -> Result<()> {
     let v: Vec<Error> = std::iter::from_fn(get_error).collect();
     if v.is_empty() {
         Ok(())
     } else {
-        Err(v)
+        Err(Errors(v))
     }
 }

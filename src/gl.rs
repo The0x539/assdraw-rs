@@ -12,6 +12,11 @@ use std::cell::{Cell, RefCell};
 use std::convert::TryInto;
 
 pub mod abstraction;
+use abstraction::{
+    program::Program,
+    shader::{Shader, ShaderType},
+};
+
 mod get;
 
 type Ctx = RawContext<PossiblyCurrent>;
@@ -31,25 +36,6 @@ pub struct OpenGlCanvas {
     program: Cell<GLuint>,
     dimensions: Cell<Dimensions>,
     canvas: nwg::ExternCanvas,
-}
-
-unsafe fn single_shader_source(shader: GLuint, source: &[u8]) -> () {
-    let string = source.as_ptr().cast();
-    let length = source.len() as i32;
-
-    gl::ShaderSource(shader, 1, &string, &length);
-}
-
-#[allow(dead_code)]
-unsafe fn shader_info_log(shader: GLuint) -> String {
-    let mut buf_len = 0;
-    gl::GetShaderiv(shader, gl::SHADER_SOURCE_LENGTH, &mut buf_len);
-    let mut buf = vec![0u8; buf_len as usize];
-
-    let mut log_len = 0;
-    gl::GetShaderInfoLog(shader, buf_len, &mut log_len, buf.as_mut_ptr().cast());
-
-    String::from_utf8_lossy(&buf[..log_len as usize]).into_owned()
 }
 
 fn slice_size<T: Sized>(s: &[T]) -> usize {
@@ -74,25 +60,31 @@ impl OpenGlCanvas {
             gl::ClearColor(0.0, 0.0, 0.0, 1.0);
 
             const VS_SRC: &'static [u8] = include_bytes!("vs.glsl");
-            let vs = gl::CreateShader(gl::VERTEX_SHADER);
-            single_shader_source(vs, VS_SRC);
-            gl::CompileShader(vs);
+            let vs = Shader::new(ShaderType::Vertex);
+            vs.source(VS_SRC);
+
+            let did_compile = vs.compile();
+            print!("{}", vs.info_log());
+            assert!(did_compile);
 
             const FS_SRC: &'static [u8] = include_bytes!("fs.glsl");
-            let fs = gl::CreateShader(gl::FRAGMENT_SHADER);
-            single_shader_source(fs, FS_SRC);
-            gl::CompileShader(fs);
+            let fs = Shader::new(ShaderType::Fragment);
+            fs.source(FS_SRC);
 
-            let program = gl::CreateProgram();
-            gl::AttachShader(program, vs);
-            gl::AttachShader(program, fs);
-            gl::LinkProgram(program);
-            gl::UseProgram(program);
+            let did_compile = fs.compile();
+            print!("{}", fs.info_log());
+            assert!(did_compile);
 
-            self.program.set(program);
+            let program = Program::new();
+            program.attach_shader(&vs).unwrap();
+            program.attach_shader(&fs).unwrap();
 
-            print!("{}", shader_info_log(vs));
-            print!("{}", shader_info_log(fs));
+            let did_link = program.link();
+            print!("{}", program.info_log());
+            assert!(did_link);
+
+            gl::UseProgram(program.raw());
+            self.program.set(program.raw());
 
             #[rustfmt::skip]
             let vertex_data: &[f32] = &[
