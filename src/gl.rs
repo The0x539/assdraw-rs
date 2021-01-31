@@ -8,8 +8,9 @@ use glutin::{
 };
 use cstr::cstr;
 use image::ImageDecoder;
+use once_cell::unsync::OnceCell;
 
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
 use std::convert::TryInto;
 
 pub mod abstraction;
@@ -33,8 +34,8 @@ pub struct Dimensions {
 
 #[derive(Default)]
 pub struct OpenGlCanvas {
-    ctx: RefCell<Option<Ctx>>,
-    program: RefCell<Option<Program>>,
+    ctx: OnceCell<Ctx>,
+    program: OnceCell<Program>,
     dimensions: Cell<Dimensions>,
     canvas: nwg::ExternCanvas,
 }
@@ -85,7 +86,9 @@ impl OpenGlCanvas {
             assert!(did_link);
 
             gl::UseProgram(*program);
-            *self.program.borrow_mut() = Some(program);
+            self.program
+                .set(program)
+                .expect("program field was already initialized");
 
             #[rustfmt::skip]
             let vertex_data: &[f32] = &[
@@ -125,12 +128,12 @@ impl OpenGlCanvas {
             };
             self.set_dimensions(default_dims);
 
-            *self.ctx.borrow_mut() = Some(ctx);
+            self.ctx.set(ctx).expect("context was already created");
         }
     }
 
     fn with_ctx<F: FnOnce(&Ctx) -> T, T>(&self, f: F) -> Option<T> {
-        self.ctx.borrow().as_ref().map(f)
+        self.ctx.get().map(f)
     }
 
     pub fn render(&self) {
@@ -164,8 +167,7 @@ impl OpenGlCanvas {
     pub fn set_dimensions(&self, dims: Dimensions) {
         self.dimensions.set(dims);
 
-        let prog = self.program.borrow();
-        let prog = prog.as_ref().unwrap();
+        let prog = self.program.get().unwrap();
 
         let uniform = |name| prog.get_uniform_location(name).unwrap().unwrap();
         let screen_dims_loc = uniform(cstr!("u_Dims.screen_dims"));
