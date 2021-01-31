@@ -15,6 +15,7 @@ use std::convert::TryInto;
 
 pub mod abstraction;
 use abstraction::{
+    buffer::{Buffer, BufferTarget, Usage},
     program::Program,
     shader::{Shader, ShaderType},
 };
@@ -38,10 +39,6 @@ pub struct OpenGlCanvas {
     program: OnceCell<Program>,
     dimensions: Cell<Dimensions>,
     canvas: nwg::ExternCanvas,
-}
-
-fn slice_size<T: Sized>(s: &[T]) -> usize {
-    s.len() * std::mem::size_of::<T>()
 }
 
 impl OpenGlCanvas {
@@ -98,15 +95,9 @@ impl OpenGlCanvas {
                 0.0, 0.0,
             ];
 
-            let mut vb = 0;
-            gl::GenBuffers(1, &mut vb);
-            gl::BindBuffer(gl::ARRAY_BUFFER, vb);
-            gl::BufferData(
-                gl::ARRAY_BUFFER,
-                slice_size(vertex_data) as _,
-                vertex_data.as_ptr().cast(),
-                gl::STATIC_DRAW,
-            );
+            let vb = Buffer::new();
+            vb.bind(BufferTarget::Array);
+            Buffer::buffer_data(BufferTarget::Array, vertex_data, Usage::StaticDraw).unwrap();
 
             let mut vao = 0;
             gl::GenVertexArrays(1, &mut vao);
@@ -224,12 +215,7 @@ impl OpenGlCanvas {
                 buf2.as_ptr().cast(),
             );
 
-            gl::BufferData(
-                gl::ARRAY_BUFFER,
-                slice_size(vertex_data) as _,
-                vertex_data.as_ptr().cast(),
-                gl::STATIC_DRAW,
-            );
+            Buffer::buffer_data(BufferTarget::Array, vertex_data, Usage::StaticDraw).unwrap();
         }
     }
 }

@@ -17,3 +17,6 @@ pub use shader::Shader;
 
 pub mod program;
 pub use program::Program;
+
+pub mod buffer;
+pub use buffer::Buffer;
