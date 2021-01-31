@@ -83,8 +83,8 @@ impl OpenGlCanvas {
             print!("{}", program.info_log());
             assert!(did_link);
 
-            gl::UseProgram(program.raw());
-            self.program.set(program.raw());
+            gl::UseProgram(*program);
+            self.program.set(*program);
 
             #[rustfmt::skip]
             let vertex_data: &[f32] = &[

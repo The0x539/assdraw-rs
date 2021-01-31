@@ -1,3 +1,5 @@
+use std::ops::Deref;
+
 use gl::types::{GLchar, GLenum, GLint, GLuint};
 
 use super::error::{check_errors, Result};
@@ -57,8 +59,11 @@ impl Program {
         check_errors().unwrap();
         self.link_status()
     }
+}
 
-    pub fn raw(&self) -> GLuint {
-        self.0
+impl Deref for Program {
+    type Target = GLuint;
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
