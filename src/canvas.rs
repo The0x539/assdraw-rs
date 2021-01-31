@@ -53,6 +53,22 @@ pub struct Canvas {
     drag_start_pos: Cell<(i32, i32)>,
 }
 
+pub fn change_scale(mut scale: f32, factor: i32) -> f32 {
+    assert!(scale > 0.0);
+    if scale < 1.0 {
+        scale = scale.recip().round();
+        scale = -scale + 2.0;
+    }
+
+    scale += factor as f32;
+
+    if scale < 1.0 {
+        scale = (scale - 2.0).abs();
+        scale = scale.recip();
+    }
+    scale
+}
+
 impl Canvas {
     fn cursor_pos(&self) -> (i32, i32) {
         nwg::GlobalCursor::local_position(&self.canvas, None)
@@ -65,8 +81,8 @@ impl Canvas {
             let (dx1, dy1) = self.cursor_pos();
             let (dx, dy) = (dx1 - dx0, dy1 - dy0);
             self.canvas.update_dimensions(|dims| {
-                let x = x0 + (dx as f32) / dims.scale;
-                let y = y0 + (dy as f32) / dims.scale;
+                let x = x0 - (dx as f32) / dims.scale;
+                let y = y0 - (dy as f32) / dims.scale;
                 dims.scene_pos = [x, y];
             })
         }
@@ -158,11 +174,31 @@ impl Canvas {
 
     pub fn zoom(&self, data: &nwg::EventData) {
         let factor = match data {
-            nwg::EventData::OnMouseWheel(i) => 1.25_f32.powf(*i as f32 / 120.0),
+            nwg::EventData::OnMouseWheel(i) => *i / 120,
             _ => panic!(),
         };
         self.canvas.update_dimensions(|dims| {
-            dims.scale *= factor;
+            let (mouse_x, mouse_y) = self.cursor_pos();
+            let [mouse_x, mouse_y] = [mouse_x as f32, mouse_y as f32];
+            let [mouse_scene_x, mouse_scene_y] = [
+                dims.scene_pos[0] + mouse_x / dims.scale,
+                dims.scene_pos[1] + mouse_y / dims.scale,
+            ];
+
+            let new_scale = change_scale(dims.scale, factor);
+
+            let new_scene_pos = [
+                mouse_scene_x - (mouse_x / new_scale),
+                mouse_scene_y - (mouse_y / new_scale),
+            ];
+
+            if self.dragging.get() {
+                self.pre_drag_pos.set(new_scene_pos);
+                self.drag_start_pos.set(self.cursor_pos());
+            }
+
+            dims.scale = new_scale;
+            dims.scene_pos = new_scene_pos;
         })
     }
 }

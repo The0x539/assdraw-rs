@@ -15,7 +15,7 @@ out vec2 v_Position;
 void main() {
 	vec2 pos = a_Position;
 
-	pos += u_Dims.scene_pos;
+	pos -= u_Dims.scene_pos;
 	pos /= u_Dims.screen_dims;
 	pos *= u_Dims.scale;
 
