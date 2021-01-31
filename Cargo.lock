@@ -48,6 +48,7 @@ dependencies = [
  "image",
  "native-windows-derive",
  "native-windows-gui",
+ "thiserror",
 ]
 
 [[package]]

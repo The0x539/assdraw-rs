@@ -5,6 +5,8 @@ use nwg::NativeUi;
 mod canvas;
 mod gl;
 
+pub use crate::gl::abstraction;
+
 fn main() {
     nwg::init().expect("Failed to init NWG");
     use canvas::Canvas;
