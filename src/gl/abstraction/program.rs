@@ -25,7 +25,7 @@ impl Program {
     }
 
     pub fn attach_shader(&self, shader: &super::Shader) -> Result<()> {
-        unsafe { gl::AttachShader(self.0, shader.0) };
+        unsafe { gl::AttachShader(self.0, **shader) };
         check_errors()?;
         Ok(())
     }

@@ -11,7 +11,9 @@ pub enum ShaderType {
     Fragment = gl::FRAGMENT_SHADER,
 }
 
-pub struct Shader(pub(super) GLuint);
+#[derive(Debug)]
+pub struct Shader(GLuint);
+deref_wrap!(Shader as GLuint);
 
 impl Shader {
     pub fn new(shader_type: ShaderType) -> Self {
