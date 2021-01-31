@@ -34,17 +34,23 @@ where
     const F: Getter<T> = T::F;
 }
 
+pub fn get_errors() -> Result<(), &'static str> {
+    loop {
+        let msg = match unsafe { gl::GetError() } {
+            gl::INVALID_ENUM => "invalid enum",
+            gl::INVALID_VALUE => "invalid value",
+            gl::INVALID_OPERATION => "invalid operation",
+            gl::NO_ERROR => return Ok(()),
+            e => panic!("Unfamiliar error: {}", e),
+        };
+        return Err(msg);
+    }
+}
+
 pub unsafe fn get<T: GlGet<U>, U: Pod>(pname: GLenum) -> T {
     let mut val = T::zeroed();
     T::F(pname, &mut val as *mut T as *mut U);
-    loop {
-        match gl::GetError() {
-            gl::INVALID_ENUM => panic!("invalid enum"),
-            gl::INVALID_VALUE => panic!("invalid value"),
-            gl::NO_ERROR => break,
-            e => panic!("Unexpected error: {}", e),
-        }
-    }
+    get_errors().unwrap();
     val
 }
 

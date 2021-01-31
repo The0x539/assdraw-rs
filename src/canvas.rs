@@ -22,7 +22,11 @@ pub struct Canvas {
     pub grid: nwg::GridLayout,
 
     #[nwg_control(ty: nwg::ExternCanvas, parent: Some(&data.window))]
-    #[nwg_events(OnMouseMove: [Canvas::mouse_move], OnMousePress: [Canvas::mouse_press(SELF, EVT)])]
+    #[nwg_events(
+        OnMouseMove: [Canvas::mouse_move],
+        OnMousePress: [Canvas::mouse_press(SELF, EVT)],
+        OnMouseWheel: [Canvas::zoom(SELF, EVT_DATA)],
+    )]
     #[nwg_layout_item(layout: grid, col: 0, row: 0, col_span: 3, row_span: 8)]
     pub canvas: OpenGlCanvas,
 
@@ -141,8 +145,15 @@ impl Canvas {
             }
         };
         let cursor = std::io::Cursor::new(&buf[..]);
-        use image::ImageDecoder;
         let img = image::codecs::bmp::BmpDecoder::new(cursor).unwrap();
-        println!("{:?}", img.dimensions());
+        self.canvas.set_image(img);
+    }
+
+    pub fn zoom(&self, data: &nwg::EventData) {
+        let factor = match data {
+            nwg::EventData::OnMouseWheel(i) => 1.25_f32.powf(*i as f32 / 120.0),
+            _ => panic!(),
+        };
+        self.canvas.scale_by(factor);
     }
 }
