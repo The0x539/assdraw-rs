@@ -6,6 +6,7 @@ use glutin::{
     dpi::PhysicalSize,
     platform::windows::RawContextExt,
 };
+use cstr::cstr;
 use image::ImageDecoder;
 
 use std::cell::{Cell, RefCell};
@@ -21,7 +22,7 @@ mod get;
 
 type Ctx = RawContext<PossiblyCurrent>;
 
-use gl::types::{GLfloat, GLint, GLuint};
+use gl::types::{GLfloat, GLint};
 
 #[derive(Default, Copy, Clone, Debug)]
 pub struct Dimensions {
@@ -33,7 +34,7 @@ pub struct Dimensions {
 #[derive(Default)]
 pub struct OpenGlCanvas {
     ctx: RefCell<Option<Ctx>>,
-    program: Cell<GLuint>,
+    program: RefCell<Option<Program>>,
     dimensions: Cell<Dimensions>,
     canvas: nwg::ExternCanvas,
 }
@@ -84,7 +85,7 @@ impl OpenGlCanvas {
             assert!(did_link);
 
             gl::UseProgram(*program);
-            self.program.set(*program);
+            *self.program.borrow_mut() = Some(program);
 
             #[rustfmt::skip]
             let vertex_data: &[f32] = &[
@@ -162,20 +163,19 @@ impl OpenGlCanvas {
 
     pub fn set_dimensions(&self, dims: Dimensions) {
         self.dimensions.set(dims);
+
+        let prog = self.program.borrow();
+        let prog = prog.as_ref().unwrap();
+
+        let uniform = |name| prog.get_uniform_location(name).unwrap().unwrap();
+        let screen_dims_loc = uniform(cstr!("u_Dims.screen_dims"));
+        let scene_pos_loc = uniform(cstr!("u_Dims.scene_pos"));
+        let scale_loc = uniform(cstr!("u_Dims.scale"));
+
         unsafe {
-            let prog = self.program.get();
-            let get_uniform_loc = |name: &[u8]| gl::GetUniformLocation(prog, name.as_ptr().cast());
-            gl::Uniform2f(
-                get_uniform_loc(b"u_Dims.screen_dims\0"),
-                dims.screen_dims[0],
-                dims.screen_dims[1],
-            );
-            gl::Uniform2f(
-                get_uniform_loc(b"u_Dims.scene_pos\0"),
-                dims.scene_pos[0],
-                dims.scene_pos[1],
-            );
-            gl::Uniform1f(get_uniform_loc(b"u_Dims.scale\0"), dims.scale);
+            gl::Uniform2f(*screen_dims_loc, dims.screen_dims[0], dims.screen_dims[1]);
+            gl::Uniform2f(*scene_pos_loc, dims.scene_pos[0], dims.scene_pos[1]);
+            gl::Uniform1f(*scale_loc, dims.scale);
         }
         get::get_errors().unwrap();
     }

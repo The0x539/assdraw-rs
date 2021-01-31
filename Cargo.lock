@@ -43,6 +43,7 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "clipboard-win",
+ "cstr",
  "gl",
  "glutin",
  "image",
@@ -324,6 +325,16 @@ dependencies = [
  "autocfg",
  "cfg-if 1.0.0",
  "lazy_static",
+]
+
+[[package]]
+name = "cstr"
+version = "0.2.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c11a39d776a3b35896711da8a04dc1835169dcd36f710878187637314e47941b"
+dependencies = [
+ "proc-macro2",
+ "quote",
 ]
 
 [[package]]
