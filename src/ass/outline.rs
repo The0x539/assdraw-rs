@@ -46,7 +46,7 @@ pub struct DRect {
 
 #[derive(Debug, Copy, Clone)]
 #[repr(u8)]
-pub enum Segment {
+pub enum SegmentType {
     LineSegment = 1,
     QuadSpline = 2,
     CubicSpline = 3,
@@ -58,7 +58,7 @@ pub enum Segment {
     CubicSplineEnd = Self::CubicSpline as u8 | 4,
 }
 
-impl Segment {
+impl SegmentType {
     #[inline]
     pub const fn outline_count(self) -> u8 {
         // a line segment has 1 point, a quad spline has 2, a cubic spline has 3
@@ -84,8 +84,8 @@ impl Segment {
 
 #[derive(Debug, Default, Clone)]
 pub struct Outline {
-    points: Vec<Vector>,
-    segments: Vec<Segment>,
+    pub points: Vec<Vector>,
+    pub segments: Vec<SegmentType>,
 }
 
 impl Outline {
@@ -98,7 +98,7 @@ impl Outline {
         }
     }
 
-    pub fn add_point(&mut self, pt: Vector, segment: Option<Segment>) -> Result<(), ()> {
+    pub fn add_point(&mut self, pt: Vector, segment: Option<SegmentType>) -> Result<(), ()> {
         if pt.x.saturating_abs() > Self::MAX_COORD || pt.y.saturating_abs() > Self::MAX_COORD {
             return Err(());
         }
@@ -109,7 +109,7 @@ impl Outline {
         Ok(())
     }
 
-    pub fn add_segment(&mut self, segment: Segment) {
+    pub fn add_segment(&mut self, segment: SegmentType) {
         self.segments.push(segment);
     }
 
