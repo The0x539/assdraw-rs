@@ -82,4 +82,13 @@ impl Shader {
 
         String::from_utf8(buf).unwrap()
     }
+
+    pub fn build(shader_type: ShaderType, source: &'static str) -> Self {
+        let shader = Self::new(shader_type);
+        shader.source(source);
+        let did_compile = shader.compile();
+        print!("{}", shader.info_log());
+        assert!(did_compile);
+        shader
+    }
 }

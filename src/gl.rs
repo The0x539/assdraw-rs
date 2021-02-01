@@ -61,21 +61,8 @@ impl OpenGlCanvas {
 
             gl::ClearColor(0.0, 0.0, 0.0, 1.0);
 
-            const VS_SRC: &'static [u8] = include_bytes!("vs.glsl");
-            let vs = Shader::new(ShaderType::Vertex);
-            vs.source(VS_SRC);
-
-            let did_compile = vs.compile();
-            print!("{}", vs.info_log());
-            assert!(did_compile);
-
-            const FS_SRC: &'static [u8] = include_bytes!("fs.glsl");
-            let fs = Shader::new(ShaderType::Fragment);
-            fs.source(FS_SRC);
-
-            let did_compile = fs.compile();
-            print!("{}", fs.info_log());
-            assert!(did_compile);
+            let vs = Shader::build(ShaderType::Vertex, include_str!("vs.glsl"));
+            let fs = Shader::build(ShaderType::Fragment, include_str!("fs.glsl"));
 
             let program = Program::new();
             program.attach_shader(&vs).unwrap();
