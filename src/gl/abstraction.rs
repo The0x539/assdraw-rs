@@ -20,3 +20,6 @@ pub use program::Program;
 
 pub mod buffer;
 pub use buffer::Buffer;
+
+pub mod vertex_array;
+pub use vertex_array::VertexArray;

@@ -18,6 +18,7 @@ use abstraction::{
     buffer::{Buffer, BufferTarget, Usage},
     program::Program,
     shader::{Shader, ShaderType},
+    vertex_array::VertexArray,
 };
 
 mod get;
@@ -37,6 +38,8 @@ pub struct Dimensions {
 pub struct OpenGlCanvas {
     ctx: OnceCell<Ctx>,
     program: OnceCell<Program>,
+    img_verts: OnceCell<VertexArray>,
+    alt_verts: OnceCell<VertexArray>,
     dimensions: Cell<Dimensions>,
     canvas: nwg::ExternCanvas,
 }
@@ -87,6 +90,20 @@ impl OpenGlCanvas {
                 .set(program)
                 .expect("program field was already initialized");
 
+            let alt_data: &[f32] = &[0.0, 0.0, 0.0, 100.0, 100.0, 150.0, 200.0, 50.0];
+
+            let alt_vb = Buffer::new();
+            alt_vb.bind(BufferTarget::Array);
+            Buffer::buffer_data(BufferTarget::Array, alt_data, Usage::StaticDraw).unwrap();
+
+            let alt_verts = VertexArray::new();
+            alt_verts.bind();
+            self.alt_verts.set(alt_verts).unwrap();
+
+            gl::EnableVertexAttribArray(0);
+            let stride = mem::size_of::<f32>() * 2;
+            gl::VertexAttribPointer(0, 2, gl::FLOAT, 0, stride as _, ptr::null());
+
             #[rustfmt::skip]
             let vertex_data: &[f32] = &[
                 0.0, 0.0,
@@ -99,9 +116,9 @@ impl OpenGlCanvas {
             vb.bind(BufferTarget::Array);
             Buffer::buffer_data(BufferTarget::Array, vertex_data, Usage::StaticDraw).unwrap();
 
-            let mut vao = 0;
-            gl::GenVertexArrays(1, &mut vao);
-            gl::BindVertexArray(vao);
+            let vao = VertexArray::new();
+            vao.bind();
+            self.img_verts.set(vao).unwrap();
 
             gl::EnableVertexAttribArray(0);
 
@@ -131,6 +148,13 @@ impl OpenGlCanvas {
         self.with_ctx(|ctx| unsafe {
             get::get_errors().unwrap();
             gl::Clear(gl::COLOR_BUFFER_BIT);
+
+            if self.dimensions.get().scale > 1.0 {
+                self.alt_verts.get().unwrap().bind();
+            } else {
+                self.img_verts.get().unwrap().bind();
+            }
+
             gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
             ctx.swap_buffers().unwrap();
         });
