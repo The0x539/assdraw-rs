@@ -105,6 +105,15 @@ impl Canvas {
                 nwg::GlobalCursor::release();
                 self.dragging.set(false);
             }
+            nwg::MousePressEvent::MousePressLeftDown => {
+                let (x, y) = self.cursor_pos();
+                let dims = self.canvas.get_dimensions();
+                let (scene_x, scene_y) = (
+                    dims.scene_pos[0] + x as f32 / dims.scale,
+                    dims.scene_pos[1] + y as f32 / dims.scale,
+                );
+                self.canvas.add_point(scene_x, scene_y);
+            }
             _ => (),
         }
     }

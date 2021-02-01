@@ -78,13 +78,11 @@ impl OpenGlCanvas {
             self.img_prgm.set(Program::build(&vs, &img_fs)).unwrap();
             self.draw_prgm.set(Program::build(&vs, &draw_fs)).unwrap();
 
-            self.drawing
-                .replace(vec![0.0, 0.0, 100.0, 50.0, 200.0, 200.0]);
+            self.drawing.replace(vec![]);
 
             let draw_vb = Buffer::new();
-            draw_vb.bind(BufferTarget::Array);
-            Buffer::buffer_data(BufferTarget::Array, &[0_f32; 6], Usage::StaticDraw).unwrap();
             self.draw_vb.set(draw_vb).unwrap();
+            self.update_drawing();
 
             let draw_vao = VertexArray::new();
             draw_vao.bind();
@@ -137,9 +135,8 @@ impl OpenGlCanvas {
             self.draw_vao.get().unwrap().bind();
             gl::UseProgram(**self.draw_prgm.get().unwrap());
             self.update_dimension_uniforms();
-            self.update_drawing();
             gl::DrawArrays(gl::POINTS, 0, self.drawing.borrow().len() as i32 / 2);
-            gl::DrawArrays(gl::LINES, 0, self.drawing.borrow().len() as i32 / 2);
+            gl::DrawArrays(gl::LINE_STRIP, 0, self.drawing.borrow().len() as i32 / 2);
 
             check_errors().unwrap();
 
@@ -231,6 +228,14 @@ impl OpenGlCanvas {
             self.img_vb.get().unwrap().bind(BufferTarget::Array);
             Buffer::buffer_data(BufferTarget::Array, vertex_data, Usage::StaticDraw).unwrap();
         }
+    }
+
+    pub fn add_point(&self, x: f32, y: f32) {
+        let mut drawing = self.drawing.borrow_mut();
+        drawing.push(x);
+        drawing.push(y);
+        drop(drawing);
+        self.update_drawing();
     }
 
     pub fn update_drawing(&self) {
