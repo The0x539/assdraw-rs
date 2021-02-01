@@ -10,7 +10,7 @@ use cstr::cstr;
 use image::ImageDecoder;
 use once_cell::unsync::OnceCell;
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::convert::TryInto;
 
 pub mod abstraction;
@@ -43,8 +43,13 @@ pub struct OpenGlCanvas {
     img_prgm: OnceCell<Program>,
     draw_prgm: OnceCell<Program>,
 
+    img_vb: OnceCell<Buffer>,
+    draw_vb: OnceCell<Buffer>,
+
     img_vao: OnceCell<VertexArray>,
     draw_vao: OnceCell<VertexArray>,
+
+    drawing: RefCell<Vec<f32>>,
 
     dimensions: Cell<Dimensions>,
 }
@@ -73,44 +78,37 @@ impl OpenGlCanvas {
             self.img_prgm.set(Program::build(&vs, &img_fs)).unwrap();
             self.draw_prgm.set(Program::build(&vs, &draw_fs)).unwrap();
 
-            let alt_data: &[f32] = &[0.0, 0.0, 0.0, 100.0, 100.0, 150.0, 200.0, 50.0];
+            self.drawing
+                .replace(vec![0.0, 0.0, 100.0, 50.0, 200.0, 200.0]);
 
-            let alt_vb = Buffer::new();
-            alt_vb.bind(BufferTarget::Array);
-            Buffer::buffer_data(BufferTarget::Array, alt_data, Usage::StaticDraw).unwrap();
+            let draw_vb = Buffer::new();
+            draw_vb.bind(BufferTarget::Array);
+            Buffer::buffer_data(BufferTarget::Array, &[0_f32; 6], Usage::StaticDraw).unwrap();
+            self.draw_vb.set(draw_vb).unwrap();
 
-            let alt_verts = VertexArray::new();
-            alt_verts.bind();
-            self.draw_vao.set(alt_verts).unwrap();
-
+            let draw_vao = VertexArray::new();
+            draw_vao.bind();
+            self.draw_vao.set(draw_vao).unwrap();
             gl::EnableVertexAttribArray(0);
             let stride = mem::size_of::<f32>() * 2;
             gl::VertexAttribPointer(0, 2, gl::FLOAT, 0, stride as _, ptr::null());
 
-            #[rustfmt::skip]
-            let vertex_data: &[f32] = &[
-                0.0, 0.0,
-                0.0, 0.0,
-                0.0, 0.0,
-                0.0, 0.0,
-            ];
+            let img_vb = Buffer::new();
+            img_vb.bind(BufferTarget::Array);
+            Buffer::buffer_data(BufferTarget::Array, &[0_f32; 8], Usage::StaticDraw).unwrap();
+            self.img_vb.set(img_vb).unwrap();
 
-            let vb = Buffer::new();
-            vb.bind(BufferTarget::Array);
-            Buffer::buffer_data(BufferTarget::Array, vertex_data, Usage::StaticDraw).unwrap();
-
-            let vao = VertexArray::new();
-            vao.bind();
-            self.img_vao.set(vao).unwrap();
-
+            let img_vao = VertexArray::new();
+            img_vao.bind();
+            self.img_vao.set(img_vao).unwrap();
             gl::EnableVertexAttribArray(0);
-
-            let stride = mem::size_of::<f32>() * 2;
             gl::VertexAttribPointer(0, 2, gl::FLOAT, 0, stride as _, ptr::null());
 
             let mut tex = 0;
             gl::GenTextures(1, &mut tex);
             gl::BindTexture(gl::TEXTURE_RECTANGLE, tex);
+
+            gl::PointSize(5.0);
 
             let default_dims = Dimensions {
                 screen_dims: [100.0, 100.0],
@@ -139,7 +137,9 @@ impl OpenGlCanvas {
             self.draw_vao.get().unwrap().bind();
             gl::UseProgram(**self.draw_prgm.get().unwrap());
             self.update_dimension_uniforms();
-            gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
+            self.update_drawing();
+            gl::DrawArrays(gl::POINTS, 0, self.drawing.borrow().len() as i32 / 2);
+            gl::DrawArrays(gl::LINES, 0, self.drawing.borrow().len() as i32 / 2);
 
             check_errors().unwrap();
 
@@ -216,9 +216,6 @@ impl OpenGlCanvas {
         ];
 
         unsafe {
-            self.img_vao.get().unwrap().bind();
-            gl::UseProgram(**self.img_prgm.get().unwrap());
-
             gl::TexImage2D(
                 gl::TEXTURE_RECTANGLE,
                 0,
@@ -231,7 +228,20 @@ impl OpenGlCanvas {
                 buf2.as_ptr().cast(),
             );
 
+            self.img_vb.get().unwrap().bind(BufferTarget::Array);
             Buffer::buffer_data(BufferTarget::Array, vertex_data, Usage::StaticDraw).unwrap();
+        }
+    }
+
+    pub fn update_drawing(&self) {
+        unsafe {
+            self.draw_vb.get().unwrap().bind(BufferTarget::Array);
+            Buffer::buffer_data(
+                BufferTarget::Array,
+                self.drawing.borrow().as_slice(),
+                Usage::StaticDraw,
+            )
+            .unwrap();
         }
     }
 }
