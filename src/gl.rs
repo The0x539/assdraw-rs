@@ -185,9 +185,9 @@ impl OpenGlCanvas {
         let prog = self.program.get().unwrap();
 
         let uniform = |name| prog.get_uniform_location(name).unwrap().unwrap();
-        let screen_dims_loc = uniform(cstr!("u_Dims.screen_dims"));
-        let scene_pos_loc = uniform(cstr!("u_Dims.scene_pos"));
-        let scale_loc = uniform(cstr!("u_Dims.scale"));
+        let screen_dims_loc = uniform(cstr!("screen_dims"));
+        let scene_pos_loc = uniform(cstr!("scene_pos"));
+        let scale_loc = uniform(cstr!("scale"));
 
         unsafe {
             gl::Uniform2f(*screen_dims_loc, dims.screen_dims[0], dims.screen_dims[1]);

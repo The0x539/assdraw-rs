@@ -1,12 +1,9 @@
 #version 330
+#extension GL_ARB_explicit_uniform_location : require
 
-struct Dimensions {
-	vec2 screen_dims;
-	vec2 scene_pos;
-	float scale;
-};
-
-uniform Dimensions u_Dims;
+layout (location=0) uniform vec2 screen_dims;
+layout (location=2) uniform vec2 scene_pos;
+layout (location=4) uniform float scale;
 
 layout (location=0) in vec2 a_Position;
 
@@ -15,9 +12,9 @@ out vec2 v_Position;
 void main() {
 	vec2 pos = a_Position;
 
-	pos -= u_Dims.scene_pos;
-	pos /= u_Dims.screen_dims;
-	pos *= u_Dims.scale;
+	pos -= scene_pos;
+	pos /= screen_dims;
+	pos *= scale;
 
 	// top-left origin
 	pos -= 0.5;
