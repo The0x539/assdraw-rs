@@ -16,6 +16,7 @@ use std::convert::TryInto;
 pub mod abstraction;
 use abstraction::{
     buffer::{Buffer, BufferTarget, Usage},
+    error::check_errors,
     program::Program,
     shader::{Shader, ShaderType},
     vertex_array::VertexArray,
@@ -37,11 +38,15 @@ pub struct Dimensions {
 #[derive(Default)]
 pub struct OpenGlCanvas {
     ctx: OnceCell<Ctx>,
-    program: OnceCell<Program>,
-    img_verts: OnceCell<VertexArray>,
-    alt_verts: OnceCell<VertexArray>,
-    dimensions: Cell<Dimensions>,
     canvas: nwg::ExternCanvas,
+
+    img_prgm: OnceCell<Program>,
+    draw_prgm: OnceCell<Program>,
+
+    img_vao: OnceCell<VertexArray>,
+    draw_vao: OnceCell<VertexArray>,
+
+    dimensions: Cell<Dimensions>,
 }
 
 impl OpenGlCanvas {
@@ -62,20 +67,11 @@ impl OpenGlCanvas {
             gl::ClearColor(0.0, 0.0, 0.0, 1.0);
 
             let vs = Shader::build(ShaderType::Vertex, include_str!("vs.glsl"));
-            let fs = Shader::build(ShaderType::Fragment, include_str!("fs.glsl"));
+            let img_fs = Shader::build(ShaderType::Fragment, include_str!("fs.glsl"));
+            let draw_fs = Shader::build(ShaderType::Fragment, include_str!("blue.glsl"));
 
-            let program = Program::new();
-            program.attach_shader(&vs).unwrap();
-            program.attach_shader(&fs).unwrap();
-
-            let did_link = program.link();
-            print!("{}", program.info_log());
-            assert!(did_link);
-
-            gl::UseProgram(*program);
-            self.program
-                .set(program)
-                .expect("program field was already initialized");
+            self.img_prgm.set(Program::build(&vs, &img_fs)).unwrap();
+            self.draw_prgm.set(Program::build(&vs, &draw_fs)).unwrap();
 
             let alt_data: &[f32] = &[0.0, 0.0, 0.0, 100.0, 100.0, 150.0, 200.0, 50.0];
 
@@ -85,7 +81,7 @@ impl OpenGlCanvas {
 
             let alt_verts = VertexArray::new();
             alt_verts.bind();
-            self.alt_verts.set(alt_verts).unwrap();
+            self.draw_vao.set(alt_verts).unwrap();
 
             gl::EnableVertexAttribArray(0);
             let stride = mem::size_of::<f32>() * 2;
@@ -105,7 +101,7 @@ impl OpenGlCanvas {
 
             let vao = VertexArray::new();
             vao.bind();
-            self.img_verts.set(vao).unwrap();
+            self.img_vao.set(vao).unwrap();
 
             gl::EnableVertexAttribArray(0);
 
@@ -114,7 +110,7 @@ impl OpenGlCanvas {
 
             let mut tex = 0;
             gl::GenTextures(1, &mut tex);
-            gl::BindTexture(gl::TEXTURE_RECTANGLE, tex);
+            gl::BindTexture(gl::TEXTURE_RECTANGLE, dbg!(tex));
 
             let default_dims = Dimensions {
                 screen_dims: [100.0, 100.0],
@@ -133,16 +129,21 @@ impl OpenGlCanvas {
 
     pub fn render(&self) {
         self.with_ctx(|ctx| unsafe {
-            get::get_errors().unwrap();
             gl::Clear(gl::COLOR_BUFFER_BIT);
 
-            if self.dimensions.get().scale > 1.0 {
-                self.alt_verts.get().unwrap().bind();
-            } else {
-                self.img_verts.get().unwrap().bind();
-            }
-
+            gl::BindTexture(gl::TEXTURE_RECTANGLE, 1);
+            self.img_vao.get().unwrap().bind();
+            gl::UseProgram(**self.img_prgm.get().unwrap());
+            self.update_dimension_uniforms();
             gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
+
+            self.draw_vao.get().unwrap().bind();
+            gl::UseProgram(**self.draw_prgm.get().unwrap());
+            self.update_dimension_uniforms();
+            gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
+
+            check_errors().unwrap();
+
             ctx.swap_buffers().unwrap();
         });
     }
@@ -168,8 +169,11 @@ impl OpenGlCanvas {
 
     pub fn set_dimensions(&self, dims: Dimensions) {
         self.dimensions.set(dims);
+    }
 
-        let prog = self.program.get().unwrap();
+    fn update_dimension_uniforms(&self) {
+        let dims = self.get_dimensions();
+        let prog = self.img_prgm.get().unwrap();
 
         let uniform = |name| prog.get_uniform_location(name).unwrap().unwrap();
         let screen_dims_loc = uniform(cstr!("screen_dims"));
@@ -181,7 +185,6 @@ impl OpenGlCanvas {
             gl::Uniform2f(*scene_pos_loc, dims.scene_pos[0], dims.scene_pos[1]);
             gl::Uniform1f(*scale_loc, dims.scale);
         }
-        get::get_errors().unwrap();
     }
 
     pub fn set_image<'a>(&self, img: impl ImageDecoder<'a>) {
@@ -214,6 +217,9 @@ impl OpenGlCanvas {
         ];
 
         unsafe {
+            self.img_vao.get().unwrap().bind();
+            gl::UseProgram(**self.img_prgm.get().unwrap());
+
             gl::TexImage2D(
                 gl::TEXTURE_RECTANGLE,
                 0,

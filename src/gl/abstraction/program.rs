@@ -3,6 +3,7 @@ use std::ffi::CStr;
 use gl::types::{GLchar, GLenum, GLint, GLuint};
 
 use super::error::{check_errors, Result};
+use super::Shader;
 
 #[derive(Debug)]
 pub struct AttributeLocation(GLint);
@@ -24,7 +25,7 @@ impl Program {
         Self(p)
     }
 
-    pub fn attach_shader(&self, shader: &super::Shader) -> Result<()> {
+    pub fn attach_shader(&self, shader: &Shader) -> Result<()> {
         unsafe { gl::AttachShader(self.0, **shader) };
         check_errors()?;
         Ok(())
@@ -68,6 +69,16 @@ impl Program {
         unsafe { gl::LinkProgram(self.0) };
         check_errors().unwrap();
         self.link_status()
+    }
+
+    pub fn build(vs: &Shader, fs: &Shader) -> Self {
+        let program = Program::new();
+        program.attach_shader(vs).unwrap();
+        program.attach_shader(fs).unwrap();
+        let did_link = program.link();
+        print!("{}", program.info_log());
+        assert!(did_link);
+        program
     }
 
     pub fn get_attrib_location(&self, name: &CStr) -> Result<Option<AttributeLocation>> {
