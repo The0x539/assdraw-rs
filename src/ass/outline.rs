@@ -82,6 +82,7 @@ impl Segment {
     }
 }
 
+#[derive(Debug, Default, Clone)]
 pub struct Outline {
     points: Vec<Vector>,
     segments: Vec<Segment>,
