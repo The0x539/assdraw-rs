@@ -2,6 +2,7 @@ use native_windows_gui as nwg;
 
 use nwg::NativeUi;
 
+pub mod ass;
 mod canvas;
 mod gl;
 
