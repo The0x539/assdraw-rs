@@ -110,7 +110,7 @@ impl OpenGlCanvas {
 
             let mut tex = 0;
             gl::GenTextures(1, &mut tex);
-            gl::BindTexture(gl::TEXTURE_RECTANGLE, dbg!(tex));
+            gl::BindTexture(gl::TEXTURE_RECTANGLE, tex);
 
             let default_dims = Dimensions {
                 screen_dims: [100.0, 100.0],
@@ -131,7 +131,6 @@ impl OpenGlCanvas {
         self.with_ctx(|ctx| unsafe {
             gl::Clear(gl::COLOR_BUFFER_BIT);
 
-            gl::BindTexture(gl::TEXTURE_RECTANGLE, 1);
             self.img_vao.get().unwrap().bind();
             gl::UseProgram(**self.img_prgm.get().unwrap());
             self.update_dimension_uniforms();
