@@ -67,8 +67,11 @@ impl Outline {
         &self.points[..]
     }
 
-    pub fn segments(&self) -> &[SegmentType] {
-        &self.segments[..]
+    pub fn segments(&self) -> Segments {
+        Segments {
+            points: self.points.iter(),
+            segments: self.segments.iter(),
+        }
     }
 
     pub fn new(n_points: usize, n_segments: usize) -> Self {
