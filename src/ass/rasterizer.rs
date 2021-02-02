@@ -1,6 +1,18 @@
 use aligned_box::AlignedBox;
+use enumflags2::BitFlags;
 
 use super::outline::{Outline, Rect, Segment, Vector};
+
+#[derive(BitFlags, Copy, Clone, Debug, PartialEq, Eq)]
+#[repr(u32)]
+enum SegFlag {
+    Dn = 1,
+    UlDr = 2,
+    ExactLeft = 4,
+    ExactRight = 8,
+    ExactTop = 16,
+    ExactBottom = 32,
+}
 
 #[derive(Debug, Default, Copy, Clone)]
 pub struct PolylineSegment {
@@ -8,7 +20,7 @@ pub struct PolylineSegment {
     a: i32,
     b: i32,
     scale: i32,
-    flags: i32,
+    flags: BitFlags<SegFlag>,
     x_min: i32,
     x_max: i32,
     y_min: i32,
@@ -69,8 +81,43 @@ impl RasterizerData {
         }
     }
 
-    fn add_line(&mut self, _pt0: Vector, _pt1: Vector) {
-        todo!()
+    fn add_line(&mut self, pt0: Vector, pt1: Vector) {
+        let x = pt1.x - pt0.x;
+        let y = pt1.y - pt0.y;
+        if x == 0 && y == 0 {
+            return;
+        }
+
+        let mut line = PolylineSegment::default();
+
+        line.flags =
+            SegFlag::ExactLeft | SegFlag::ExactRight | SegFlag::ExactTop | SegFlag::ExactBottom;
+
+        if x < 0 {
+            line.flags ^= SegFlag::UlDr;
+        }
+        if y >= 0 {
+            line.flags ^= SegFlag::Dn | SegFlag::UlDr;
+        }
+
+        line.x_min = pt0.x.min(pt0.x);
+        line.x_max = pt0.x.max(pt1.x);
+        line.y_min = pt0.y.min(pt0.y);
+        line.y_max = pt0.y.max(pt1.y);
+
+        line.a = y;
+        line.b = -x;
+        line.c = y as i64 * pt0.x as i64 - x as i64 * pt0.y as i64;
+
+        #[inline]
+        fn abs(n: i32) -> u32 {
+            n.checked_abs()
+                .map(|m| m as u32)
+                .unwrap_or(i32::MAX as u32 + 1)
+        }
+        // halfplane normalization
+        let _max_ab = abs(x).max(abs(y));
+        let _shift = todo!();
     }
 
     fn add_quadratic(&mut self, pts: [Vector; 3]) {
