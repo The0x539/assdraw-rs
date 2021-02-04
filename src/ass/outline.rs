@@ -1,9 +1,88 @@
+use std::ops::{Add, AddAssign, Shr, ShrAssign, Sub};
+
 use itertools::Itertools;
 
 #[derive(Debug, Default, Copy, Clone)]
 pub struct Vector {
     pub x: i32,
     pub y: i32,
+}
+
+impl Vector {
+    #[inline]
+    pub const fn abs(self) -> Self {
+        Self {
+            x: self.x.abs(),
+            y: self.y.abs(),
+        }
+    }
+
+    #[inline]
+    pub const fn checked_abs(self) -> Option<Self> {
+        match (self.x.checked_abs(), self.y.checked_abs()) {
+            (Some(x), Some(y)) => Some(Self { x, y }),
+            _ => None,
+        }
+    }
+}
+
+impl Add for Vector {
+    type Output = Self;
+    #[inline]
+    fn add(self, rhs: Self) -> Self::Output {
+        Self {
+            x: self.x + rhs.x,
+            y: self.y + rhs.y,
+        }
+    }
+}
+
+impl Add<i32> for Vector {
+    type Output = Self;
+    #[inline]
+    fn add(self, rhs: i32) -> Self::Output {
+        Self {
+            x: self.x + rhs,
+            y: self.y + rhs,
+        }
+    }
+}
+
+impl Sub for Vector {
+    type Output = Self;
+    #[inline]
+    fn sub(self, rhs: Self) -> Self::Output {
+        Self {
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+        }
+    }
+}
+
+impl AddAssign<i32> for Vector {
+    #[inline]
+    fn add_assign(&mut self, rhs: i32) {
+        self.x += rhs;
+        self.y += rhs;
+    }
+}
+
+impl Shr<i32> for Vector {
+    type Output = Self;
+    #[inline]
+    fn shr(self, rhs: i32) -> Self::Output {
+        Self {
+            x: self.x >> rhs,
+            y: self.y >> rhs,
+        }
+    }
+}
+
+impl ShrAssign<i32> for Vector {
+    #[inline]
+    fn shr_assign(&mut self, rhs: i32) {
+        *self = *self >> rhs;
+    }
 }
 
 #[derive(Debug, Default, Copy, Clone)]
