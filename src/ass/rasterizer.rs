@@ -27,6 +27,39 @@ pub struct PolylineSegment {
     y_max: i32,
 }
 
+#[derive(Debug, Copy, Clone)]
+struct OutlineSegment {
+    r: Vector,
+    r2: i64,
+    er: i64,
+}
+
+#[inline]
+fn i64_mul(a: i32, b: i32) -> i64 {
+    a as i64 * b as i64
+}
+
+impl OutlineSegment {
+    fn new(beg: Vector, end: Vector, outline_error: i32) -> Self {
+        let x = (end.x - beg.x).checked_abs().unwrap();
+        let y = (end.y - beg.y).checked_abs().unwrap();
+
+        Self {
+            r: Vector { x, y },
+            r2: i64_mul(x, x) + i64_mul(y, y),
+            er: i64_mul(outline_error, x.max(y)),
+        }
+    }
+
+    fn subdivide(&self, beg: Vector, pt: Vector) -> bool {
+        let x = pt.x - beg.x;
+        let y = pt.y - beg.y;
+        let pdr = i64_mul(self.r.x, x) + i64_mul(self.r.y, y);
+        let pcr = i64_mul(self.r.x, y) + i64_mul(self.r.y, x);
+        (pdr < -self.er) || (pdr > self.r2 + self.er) || (pcr.checked_abs().unwrap() > self.er)
+    }
+}
+
 pub struct RasterizerData {
     outline_error: i32,
 
@@ -79,7 +112,7 @@ impl RasterizerData {
                 Segment::LineSegment(pt0, pt1) => self.add_line(pt0, pt1),
                 Segment::QuadSpline(pt0, pt1, pt2) => self.add_quadratic([pt0, pt1, pt2]),
                 Segment::CubicSpline(pt0, pt1, pt2, pt3) => self.add_cubic([pt0, pt1, pt2, pt3]),
-            }
+            };
         }
 
         for k in self.n_first..self.linebuf[0].len() {
@@ -93,11 +126,11 @@ impl RasterizerData {
         }
     }
 
-    fn add_line(&mut self, pt0: Vector, pt1: Vector) {
+    fn add_line(&mut self, pt0: Vector, pt1: Vector) -> bool {
         let x = pt1.x - pt0.x;
         let y = pt1.y - pt0.y;
         if x == 0 && y == 0 {
-            return;
+            return true;
         }
 
         let mut line = PolylineSegment::default();
@@ -137,13 +170,44 @@ impl RasterizerData {
         line.b *= 1 << shift;
         line.c *= 1 << shift;
         line.scale = compute_scale(max_ab) as i32;
+
+        true
     }
 
-    fn add_quadratic(&mut self, pts: [Vector; 3]) {
-        let [_pt0, _pt1, _pt2] = pts;
+    fn add_quadratic(&mut self, pts: [Vector; 3]) -> bool {
+        let [p0, p1, p2] = pts;
+        let seg = OutlineSegment::new(p0, p2, self.outline_error);
+        if !seg.subdivide(p0, p1) {
+            self.add_line(p0, p2);
+            return true;
+        }
+
+        let mut next = [Vector::default(); 5];
+        next[1].x = p0.x + p1.x;
+        next[1].y = p0.y + p1.y;
+
+        next[3].x = p1.x + p2.x;
+        next[3].y = p1.y + p2.y;
+
+        next[2].x = (next[1].x + next[3].x + 2) >> 2;
+        next[2].y = (next[1].y + next[3].y + 2) >> 2;
+
+        next[1].x >>= 1;
+        next[1].y >>= 1;
+        next[3].x >>= 1;
+        next[3].y >>= 1;
+
+        next[0] = p0;
+        next[4] = p2;
+
+        // wtb array slicing
+        // let (a, b) = next.split_at(3);
+        let (a, b) = ([next[0], next[1], next[2]], [next[2], next[3], next[4]]);
+        self.add_quadratic(a) && self.add_quadratic(b)
     }
 
-    fn add_cubic(&mut self, pts: [Vector; 4]) {
+    fn add_cubic(&mut self, pts: [Vector; 4]) -> bool {
         let [_pt0, _pt1, _pt2, _pt3] = pts;
+        false
     }
 }
