@@ -59,6 +59,17 @@ impl Sub for Vector {
     }
 }
 
+impl Sub<i32> for Vector {
+    type Output = Self;
+    #[inline]
+    fn sub(self, rhs: i32) -> Self::Output {
+        Self {
+            x: self.x - rhs,
+            y: self.y - rhs,
+        }
+    }
+}
+
 impl AddAssign<i32> for Vector {
     #[inline]
     fn add_assign(&mut self, rhs: i32) {

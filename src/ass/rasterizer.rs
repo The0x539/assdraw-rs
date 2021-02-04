@@ -1,3 +1,5 @@
+use std::convert::TryInto;
+
 use aligned_box::AlignedBox;
 use enumflags2::BitFlags;
 
@@ -190,9 +192,8 @@ impl RasterizerData {
         next[0] = p0;
         next[4] = p2;
 
-        // wtb array slicing
-        // let (a, b) = next.split_at(3);
-        let (a, b) = ([next[0], next[1], next[2]], [next[2], next[3], next[4]]);
+        let a = next[..3].try_into().unwrap();
+        let b = next[3..].try_into().unwrap();
         self.add_quadratic(a) && self.add_quadratic(b)
     }
 
@@ -204,10 +205,22 @@ impl RasterizerData {
         }
 
         let mut next = [Vector::default(); 7];
-        let mut center = Vector::default();
 
         next[1] = p0 + p1;
+        let center = p1 + p2 + 2;
+        next[5] = p2 + p3;
+        next[2] = next[1] + center;
+        next[4] = center + next[5];
+        next[3] = (next[2] + next[4] - 1) >> 3;
+        next[2] >>= 2;
+        next[4] >>= 2;
+        next[1] >>= 1;
+        next[5] >>= 1;
+        next[0] = p0;
+        next[1] = p3;
 
-        todo!()
+        let a = next[..4].try_into().unwrap();
+        let b = next[4..].try_into().unwrap();
+        self.add_cubic(a) && self.add_cubic(b)
     }
 }
