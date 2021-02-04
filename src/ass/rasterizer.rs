@@ -170,6 +170,8 @@ impl RasterizerData {
         line.c *= 1 << shift;
         line.scale = compute_scale(max_ab) as i32;
 
+        self.linebuf[0].push(line);
+
         true
     }
 
