@@ -38,6 +38,18 @@ pub struct RasterizerData {
     tile: AlignedBox<[u8]>,
 }
 
+#[inline]
+fn upper_mul(a: u32, b: u32) -> u32 {
+    ((a as u64 * b as u64) >> 32) as u32
+}
+
+#[inline]
+fn compute_scale(max_ab: u32) -> u32 {
+    let mut scale = upper_mul(0x5333_3333, upper_mul(max_ab, max_ab));
+    scale += 0x8810_624D - upper_mul(0xBBC6A7EF, max_ab);
+    scale
+}
+
 impl RasterizerData {
     pub fn new(tile_order: usize, outline_error: i32) -> Self {
         Self {
@@ -111,13 +123,20 @@ impl RasterizerData {
 
         #[inline]
         fn abs(n: i32) -> u32 {
-            n.checked_abs()
-                .map(|m| m as u32)
-                .unwrap_or(i32::MAX as u32 + 1)
+            match n {
+                -2147483648 => 2147483648,
+                -2147483647..=-1 => -n as u32,
+                0..=2147483647 => n as u32,
+            }
         }
         // halfplane normalization
-        let _max_ab = abs(x).max(abs(y));
-        let _shift = todo!();
+        let mut max_ab: u32 = abs(x).max(abs(y));
+        let shift: u32 = max_ab.leading_zeros() - 1;
+        max_ab <<= shift + 1;
+        line.a *= 1 << shift;
+        line.b *= 1 << shift;
+        line.c *= 1 << shift;
+        line.scale = compute_scale(max_ab) as i32;
     }
 
     fn add_quadratic(&mut self, pts: [Vector; 3]) {
