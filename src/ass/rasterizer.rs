@@ -178,8 +178,7 @@ impl RasterizerData {
         let [p0, p1, p2] = pts;
         let seg = OutlineSegment::new(p0, p2, self.outline_error);
         if !seg.subdivide(p0, p1) {
-            self.add_line(p0, p2);
-            return true;
+            return self.add_line(p0, p2);
         }
 
         let mut next = [Vector::default(); 5];
@@ -207,7 +206,18 @@ impl RasterizerData {
     }
 
     fn add_cubic(&mut self, pts: [Vector; 4]) -> bool {
-        let [_pt0, _pt1, _pt2, _pt3] = pts;
-        false
+        let [p0, p1, p2, p3] = pts;
+        let seg = OutlineSegment::new(p0, p3, self.outline_error);
+        if !seg.subdivide(p0, p1) && !seg.subdivide(p0, p2) {
+            return self.add_line(p0, p3);
+        }
+
+        let mut next = [Vector::default(); 7];
+        let mut center = Vector::default();
+
+        next[1].x = p0.x + p1.x;
+        next[1].y = p0.y + p1.y;
+
+        todo!()
     }
 }
