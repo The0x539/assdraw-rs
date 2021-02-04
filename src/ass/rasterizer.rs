@@ -3,6 +3,7 @@ use std::convert::TryInto;
 use aligned_box::AlignedBox;
 use enumflags2::BitFlags;
 
+use super::bitmap::BitmapEngine;
 use super::outline::{Outline, Rect, Segment, Vector};
 
 #[derive(BitFlags, Copy, Clone, Debug, PartialEq, Eq)]
@@ -27,6 +28,120 @@ pub struct PolylineSegment {
     x_max: i32,
     y_min: i32,
     y_max: i32,
+}
+
+impl PolylineSegment {
+    fn move_x(&mut self, x: i32) {
+        self.x_min -= x;
+        self.x_max -= x;
+        self.x_min = self.x_min.max(0);
+        self.c = i64_mul(self.a, x);
+
+        // should be const
+        let test: BitFlags<SegFlag> = SegFlag::ExactLeft | SegFlag::UlDr;
+        if self.y_min == 0 && self.flags == test {
+            self.flags.remove(SegFlag::ExactTop);
+        }
+    }
+
+    fn split_horz(&self, x: i32) -> (Self, Self) {
+        assert!(x > self.x_min && x < self.x_max);
+
+        let (mut line, mut next) = (*self, *self);
+        next.c = i64_mul(line.a, x);
+        next.x_min = 0;
+        next.x_max -= x;
+        line.x_max = x;
+
+        line.flags.remove(SegFlag::ExactTop);
+        next.flags.remove(SegFlag::ExactBottom);
+        if line.flags.contains(SegFlag::UlDr) {
+            std::mem::swap(&mut line.flags, &mut next.flags);
+        }
+        line.flags.insert(SegFlag::ExactRight);
+        next.flags.insert(SegFlag::ExactLeft);
+
+        (line, next)
+    }
+
+    fn check_left(&self, x: i32) -> bool {
+        if self.flags.contains(SegFlag::ExactLeft) {
+            return self.x_min >= x;
+        }
+        let y = if self.flags.contains(SegFlag::UlDr) {
+            self.y_min
+        } else {
+            self.y_max
+        };
+        let mut cc = self.c - i64_mul(self.a, x) - i64_mul(self.b, y);
+        if self.a > 0 {
+            cc = -cc;
+        }
+        cc >= 0
+    }
+
+    fn check_right(&self, x: i32) -> bool {
+        if self.flags.contains(SegFlag::ExactRight) {
+            return self.x_max <= x;
+        }
+        let y = if self.flags.contains(SegFlag::UlDr) {
+            self.y_max
+        } else {
+            self.y_min
+        };
+        let mut cc = self.c - i64_mul(self.a, x) - i64_mul(self.b, y);
+        if self.a > 0 {
+            cc = -cc;
+        }
+        cc >= 0
+    }
+}
+
+fn polyline_split_horz(
+    src: &[PolylineSegment],
+    n_src: [usize; 2],
+    x: i32,
+) -> ([Vec<PolylineSegment>; 2], [[usize; 2]; 2], [i32; 2]) {
+    let mut dst = [Vec::new(), Vec::new()];
+    let mut n_dst = [[0; 2]; 2];
+    let mut winding = [0; 2];
+
+    for (i, seg) in src.iter().enumerate() {
+        let group = (i >= n_src[0]) as usize;
+
+        let mut delta = 0;
+        if seg.y_min == 0 && seg.flags.contains(SegFlag::ExactTop) {
+            delta = if seg.a < 0 { 1 } else { -1 };
+        }
+        if seg.check_right(x) {
+            winding[group] += delta;
+            if seg.x_min >= x {
+                continue;
+            }
+            let mut new = *seg;
+            new.x_max = new.x_max.min(x);
+            dst[0].push(new);
+            n_dst[0][group] += 1;
+            continue;
+        }
+        if seg.check_left(x) {
+            let mut new = *seg;
+            new.move_x(x);
+            dst[1].push(new);
+            n_dst[1][group] += 1;
+            continue;
+        }
+        if seg.flags.contains(SegFlag::UlDr) {
+            winding[group] += delta;
+        }
+        let (a, b) = seg.split_horz(x);
+        dst[0].push(a);
+        n_dst[0][group] += 1;
+        dst[1].push(b);
+        n_dst[1][group] += 1;
+    }
+
+    (dst, n_dst, winding)
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -224,5 +339,46 @@ impl RasterizerData {
         let a = next[..4].try_into().unwrap();
         let b = next[4..].try_into().unwrap();
         self.add_cubic(a) && self.add_cubic(b)
+    }
+
+    pub fn fill<Engine: BitmapEngine>(
+        &mut self,
+        buf: &mut [u8],
+        x0: i32,
+        y0: i32,
+        width: i32,
+        height: i32,
+        stride: isize,
+    ) -> bool {
+        assert!(width > 0 && height > 0);
+        assert_ne!(0, width & ((1 << Engine::TILE_ORDER) - 1));
+        assert_ne!(0, height & ((1 << Engine::TILE_ORDER) - 1));
+        let (x0, y0) = (x0 * 1 << 6, y0 * 1 << 6);
+
+        for line in &mut self.linebuf[0] {
+            line.x_min -= x0;
+            line.x_max -= x0;
+            line.y_min -= y0;
+            line.y_max -= y0;
+            line.c -= i64_mul(line.a, x0) + i64_mul(line.b, y0);
+        }
+        self.bbox.x_min -= x0;
+        self.bbox.x_max -= x0;
+        self.bbox.y_min -= y0;
+        self.bbox.y_max -= y0;
+
+        self.linebuf[1].resize(self.linebuf[0].len(), PolylineSegment::default());
+
+        let n_unused = [0; 2];
+        let n_lines = [self.n_first, self.linebuf[0].len() - self.n_first];
+        let winding = [0; 0];
+
+        let size_x = width << 6;
+        let size_y = height << 6;
+        if self.bbox.x_max >= size_x {
+            todo!()
+        }
+
+        todo!()
     }
 }
