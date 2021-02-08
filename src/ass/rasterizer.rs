@@ -97,6 +97,7 @@ impl PolylineSegment {
     }
 }
 
+#[allow(dead_code)]
 fn polyline_split_horz(
     src: &[PolylineSegment],
     n_src: [usize; 2],
@@ -183,6 +184,7 @@ pub struct RasterizerData {
     linebuf: [Vec<PolylineSegment>; 2],
     n_first: usize,
 
+    #[allow(dead_code)]
     tile: AlignedBox<[u8]>,
 }
 
@@ -341,6 +343,7 @@ impl RasterizerData {
         self.add_cubic(a) && self.add_cubic(b)
     }
 
+    #[allow(unused)]
     pub fn fill<Engine: BitmapEngine>(
         &mut self,
         buf: &mut [u8],

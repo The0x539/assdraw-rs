@@ -67,6 +67,7 @@ pub trait BitmapEngine {
     const blur_vert: [ParamFilterFunc; 5];
 }
 
+#[allow(dead_code)]
 pub struct Bitmap<Engine> {
     left: i32,
     top: i32,
