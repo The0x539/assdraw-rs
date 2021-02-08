@@ -10,7 +10,7 @@ type Int = i32;
 type FillSolidTileFunc = fn(buf: &mut [u8], stride: isize, set: Int);
 type FillHalfplaneTileFunc = fn(buf: &mut [u8], stride: isize, a: i32, b: i32, c: i64, scale: i32);
 type FillGenericTileFunc =
-    fn(buf: &mut [u8], stride: isize, line: &PolylineSegment, n_lines: usize, winding: Int);
+    fn(buf: &mut [u8], stride: isize, line: &[PolylineSegment], winding: Int);
 
 type BitmapBlendFunc = fn(
     dst: &mut [u8],

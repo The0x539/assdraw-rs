@@ -97,15 +97,48 @@ impl PolylineSegment {
     }
 }
 
-#[allow(dead_code)]
+#[derive(BitFlags, Copy, Clone, Debug, PartialEq, Eq)]
+#[repr(u32)]
+enum FillFlag {
+    Solid = 1,
+    Complex = 2,
+    Reverse = 4,
+    Generic = 8,
+}
+
+#[inline]
+fn get_fill_flags(line: &[PolylineSegment], mut winding: i32) -> BitFlags<FillFlag> {
+    if line.len() == 0 {
+        return if winding != 0 {
+            BitFlags::from_flag(FillFlag::Solid)
+        } else {
+            BitFlags::empty()
+        };
+    } else if line.len() > 1 {
+        return FillFlag::Complex | FillFlag::Generic;
+    }
+
+    let line = &line[0];
+    let test = SegFlag::UlDr | SegFlag::ExactLeft;
+    if !line.flags.contains(test) == !line.flags.contains(SegFlag::Dn) {
+        winding += 1;
+    }
+
+    match winding {
+        0 => FillFlag::Complex | FillFlag::Reverse,
+        1 => FillFlag::Complex.into(),
+        _ => FillFlag::Solid.into(),
+    }
+}
+
 fn polyline_split_horz(
     src: &[PolylineSegment],
     n_src: [usize; 2],
+    mut winding: [i32; 2],
     x: i32,
 ) -> ([Vec<PolylineSegment>; 2], [[usize; 2]; 2], [i32; 2]) {
     let mut dst = [Vec::new(), Vec::new()];
     let mut n_dst = [[0; 2]; 2];
-    let mut winding = [0; 2];
 
     for (i, seg) in src.iter().enumerate() {
         let group = (i >= n_src[0]) as usize;
@@ -145,6 +178,16 @@ fn polyline_split_horz(
     (dst, n_dst, winding)
 }
 
+#[allow(unused_variables)]
+fn polyline_split_vert(
+    src: &[PolylineSegment],
+    n_src: [usize; 2],
+    winding: [i32; 2],
+    t: i32,
+) -> ([Vec<PolylineSegment>; 2], [[usize; 2]; 2], [i32; 2]) {
+    todo!()
+}
+
 #[derive(Debug, Copy, Clone)]
 struct OutlineSegment {
     r: Vector,
@@ -155,6 +198,15 @@ struct OutlineSegment {
 #[inline]
 fn i64_mul(a: i32, b: i32) -> i64 {
     a as i64 * b as i64
+}
+
+#[inline]
+fn abs(n: i32) -> u32 {
+    match n {
+        -2147483648 => 2147483648,
+        -2147483647..=-1 => -n as u32,
+        0..=2147483647 => n as u32,
+    }
 }
 
 impl OutlineSegment {
@@ -184,7 +236,6 @@ pub struct RasterizerData {
     linebuf: [Vec<PolylineSegment>; 2],
     n_first: usize,
 
-    #[allow(dead_code)]
     tile: AlignedBox<[u8]>,
 }
 
@@ -270,14 +321,6 @@ impl RasterizerData {
         line.b = -x;
         line.c = y as i64 * pt0.x as i64 - x as i64 * pt0.y as i64;
 
-        #[inline]
-        fn abs(n: i32) -> u32 {
-            match n {
-                -2147483648 => 2147483648,
-                -2147483647..=-1 => -n as u32,
-                0..=2147483647 => n as u32,
-            }
-        }
         // halfplane normalization
         let mut max_ab: u32 = abs(x).max(abs(y));
         let shift: u32 = max_ab.leading_zeros() - 1;
@@ -343,7 +386,6 @@ impl RasterizerData {
         self.add_cubic(a) && self.add_cubic(b)
     }
 
-    #[allow(unused)]
     pub fn fill<Engine: BitmapEngine>(
         &mut self,
         buf: &mut [u8],
@@ -352,7 +394,7 @@ impl RasterizerData {
         width: i32,
         height: i32,
         stride: isize,
-    ) -> bool {
+    ) {
         assert!(width > 0 && height > 0);
         assert_ne!(0, width & ((1 << Engine::TILE_ORDER) - 1));
         assert_ne!(0, height & ((1 << Engine::TILE_ORDER) - 1));
@@ -372,16 +414,259 @@ impl RasterizerData {
 
         self.linebuf[1].resize(self.linebuf[0].len(), PolylineSegment::default());
 
-        let n_unused = [0; 2];
-        let n_lines = [self.n_first, self.linebuf[0].len() - self.n_first];
-        let winding = [0; 0];
+        let mut n_lines = [self.n_first, self.linebuf[0].len() - self.n_first];
 
         let size_x = width << 6;
         let size_y = height << 6;
         if self.bbox.x_max >= size_x {
-            todo!()
+            let ([buf, _], [new_n, _], _) =
+                polyline_split_horz(&self.linebuf[0], n_lines, [0, 0], size_x);
+            self.linebuf[0] = buf;
+            n_lines = new_n;
+        }
+        if self.bbox.y_max >= size_y {
+            let ([buf, _], [new_n, _], _) =
+                polyline_split_vert(&self.linebuf[0], n_lines, [0, 0], size_y);
+            self.linebuf[0] = buf;
+            n_lines = new_n;
         }
 
-        todo!()
+        let mut winding = [0, 0];
+        if self.bbox.x_min <= 0 {
+            let ([_, buf], [_, new_n], new_winding) =
+                polyline_split_horz(&self.linebuf[0], n_lines, winding, 0);
+            self.linebuf[0] = buf;
+            winding = new_winding;
+            n_lines = new_n;
+        }
+        if self.bbox.y_min <= 0 {
+            let ([_, buf], [_, new_n], new_winding) =
+                polyline_split_vert(&self.linebuf[0], n_lines, winding, 0);
+            self.linebuf[0] = buf;
+            winding = new_winding;
+            n_lines = new_n;
+        }
+
+        assert_eq!(self.linebuf[0].len(), n_lines[0] + n_lines[1]); // ???
+        self.linebuf[1].clear(); // okay, I now understand how the linebuf works
+
+        self.fill_level::<Engine>(buf, width, height, stride, 0, n_lines, winding);
+    }
+
+    fn fill_solid<Engine: BitmapEngine>(
+        mut buf: &mut [u8],
+        width: i32,
+        height: i32,
+        stride: isize,
+        set: i32,
+    ) {
+        assert_ne!(0, width & ((1 << Engine::TILE_ORDER) - 1));
+        assert_ne!(0, height & ((1 << Engine::TILE_ORDER) - 1));
+
+        let step: isize = 1 << Engine::TILE_ORDER;
+        let tile_stride: isize = stride * step;
+        let width = width >> Engine::TILE_ORDER;
+        let height = height >> Engine::TILE_ORDER;
+        for _y in 0..height {
+            for x in 0..width {
+                let i = x as usize * step as usize;
+                Engine::fill_solid(&mut buf[i..], stride, set);
+            }
+            buf = &mut buf[tile_stride as usize..];
+        }
+    }
+
+    fn fill_halfplane<Engine: BitmapEngine>(
+        mut buf: &mut [u8],
+        width: i32,
+        height: i32,
+        stride: isize,
+        a: i32,
+        b: i32,
+        c: i64,
+        scale: i32,
+    ) {
+        assert_ne!(0, width & ((1 << Engine::TILE_ORDER) - 1));
+        assert_ne!(0, height & ((1 << Engine::TILE_ORDER) - 1));
+
+        if width == 1 << Engine::TILE_ORDER && height == 1 << Engine::TILE_ORDER {
+            Engine::fill_halfplane(buf, stride, a, b, c, scale);
+            return;
+        }
+
+        let size: i64 = i64::from(abs(a) + abs(b)) << (Engine::TILE_ORDER + 5);
+        let offs: i64 = (a as i64 + b as i64) * (1 << (Engine::TILE_ORDER + 5));
+
+        let step: isize = 1 << Engine::TILE_ORDER;
+        let tile_stride: isize = stride * (1 << Engine::TILE_ORDER);
+        let width = width >> Engine::TILE_ORDER;
+        let height = height >> Engine::TILE_ORDER;
+
+        for y in 0..height {
+            for x in 0..width {
+                let cc: i64 = c - (i64_mul(a, x) + i64_mul(b, y)) * (1 << (Engine::TILE_ORDER + 6));
+                let offs_c: i64 = offs - cc;
+                let abs_c = offs_c.abs();
+
+                let i = x as usize * step as usize;
+                if abs_c < size {
+                    Engine::fill_halfplane(&mut buf[i..], stride, a, b, cc, scale);
+                } else {
+                    let set = ((offs_c >> 32) as i32 ^ scale) as u32 & 0x8000_0000;
+                    Engine::fill_solid(&mut buf[i..], stride, set as i32);
+                }
+            }
+            buf = &mut buf[tile_stride as usize..];
+        }
+    }
+
+    fn fill_level<Engine: BitmapEngine>(
+        &mut self,
+        buf: &mut [u8],
+        width: i32,
+        height: i32,
+        stride: isize,
+        index: usize,
+        n_lines: [usize; 2],
+        winding: [i32; 2],
+    ) {
+        let total_lines = n_lines[0] + n_lines[1];
+
+        assert!(width > 0 && height > 0);
+        assert!(index < 2 && total_lines <= self.linebuf[index].len());
+        assert_ne!(0, width & ((1 << Engine::TILE_ORDER) - 1));
+        assert_ne!(0, height & ((1 << Engine::TILE_ORDER) - 1));
+
+        let (linebuf, other_linebuf) = {
+            let (a, b) = self.linebuf.split_at_mut(1);
+            if index == 0 {
+                (&mut a[0], &mut b[0])
+            } else {
+                (&mut b[0], &mut a[0])
+            }
+        };
+
+        let offs: usize = linebuf.len() - total_lines;
+        let (line, line1) = linebuf[offs..].split_at_mut(n_lines[0]);
+        assert_eq!([line.len(), line1.len()], n_lines);
+
+        macro_rules! done {
+            () => {
+                linebuf.truncate(offs);
+                assert_eq!(linebuf.len(), offs);
+                return;
+            };
+        }
+
+        macro_rules! line_fields {
+            ($line:expr, $flags:expr) => {{
+                let PolylineSegment {
+                    a, b, c, mut scale, ..
+                } = $line;
+                if $flags.contains(FillFlag::Reverse) {
+                    scale = -scale;
+                }
+                (a, b, c, scale)
+            }};
+        }
+
+        let flags0 = get_fill_flags(line, winding[0]);
+        let flags1 = get_fill_flags(line1, winding[1]);
+        let flags = (flags0 | flags1) ^ FillFlag::Complex;
+        if flags.intersects(FillFlag::Solid | FillFlag::Complex) {
+            Self::fill_solid::<Engine>(
+                buf,
+                width,
+                height,
+                stride,
+                (flags & FillFlag::Solid).bits() as _,
+            );
+            done!();
+        }
+        if !flags.contains(FillFlag::Generic) && (flags0 ^ flags1).contains(FillFlag::Complex) {
+            let l = if flags1.contains(FillFlag::Complex) {
+                line1[0]
+            } else {
+                line[0]
+            };
+            let (a, b, c, scale) = line_fields!(l, flags);
+            Self::fill_halfplane::<Engine>(buf, width, height, stride, a, b, c, scale);
+            done!();
+        }
+        if width == 1 << Engine::TILE_ORDER && height == 1 << Engine::TILE_ORDER {
+            if !flags1.contains(FillFlag::Complex) {
+                // we checked earlier that line's bounds are correct
+                Engine::fill_generic(buf, stride, &line[..], winding[0]);
+                done!();
+            }
+            if !flags0.contains(FillFlag::Complex) {
+                Engine::fill_generic(buf, stride, &line1[..], winding[1]);
+                done!();
+            }
+
+            if flags0.contains(FillFlag::Generic) {
+                Engine::fill_generic(buf, stride, &line[..], winding[0]);
+            } else {
+                let (a, b, c, scale) = line_fields!(line[0], flags0);
+                Engine::fill_halfplane(buf, stride, a, b, c, scale);
+            }
+
+            let tile = &mut self.tile[..];
+
+            if flags1.contains(FillFlag::Generic) {
+                Engine::fill_generic(tile, width as _, &line1[..], winding[1]);
+            } else {
+                let (a, b, c, scale) = line_fields!(line1[0], flags1);
+                Engine::fill_halfplane(tile, width as _, a, b, c, scale);
+            }
+
+            Engine::add_bitmaps(buf, stride, tile, width as _, height as _, width as _);
+            done!();
+        }
+
+        let offs1 = other_linebuf.len();
+        //let dst0 = linebuf;
+        //let dst1 = &mut other_linebuf[offs1..];
+
+        let (mut width, mut width1) = (width, width);
+        let (mut height, mut height1) = (height, height);
+
+        // TODO: replace with more understandable code
+        #[inline]
+        fn ilog2(n: i32) -> i32 {
+            n.leading_zeros() as i32 ^ 31
+        }
+
+        let split_idx: usize;
+
+        let ([lines_a, lines_b], n_next, winding1) = if width > height {
+            width = 1 << ilog2(width - 1);
+            width1 -= width;
+            split_idx = width as usize;
+            polyline_split_horz(&line[..], n_lines, winding, width << 6)
+        } else {
+            height = 1 << ilog2(height - 1);
+            height1 -= height;
+            split_idx = height as usize * stride as usize;
+            polyline_split_vert(&line[..], n_lines, winding, height << 6)
+        };
+        linebuf.extend(lines_a);
+        other_linebuf.extend(lines_b);
+
+        let (buf, buf1) = buf.split_at_mut(split_idx);
+
+        self.fill_level::<Engine>(buf, width, height, stride, index, n_next[0], winding);
+        assert_eq!(self.linebuf[index].len(), offs);
+
+        self.fill_level::<Engine>(
+            buf1,
+            width1,
+            height1,
+            stride,
+            index ^ 1,
+            n_next[1],
+            winding1,
+        );
+        assert_eq!(self.linebuf[index ^ 1].len(), offs1);
     }
 }
