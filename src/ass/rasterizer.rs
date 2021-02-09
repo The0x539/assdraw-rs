@@ -5,97 +5,10 @@ use enumflags2::BitFlags;
 
 use super::bitmap::BitmapEngine;
 use super::outline::{Outline, Rect, Segment, Vector};
+use super::utils::{i64_mul, u32_abs as abs};
 
-#[derive(BitFlags, Copy, Clone, Debug, PartialEq, Eq)]
-#[repr(u32)]
-enum SegFlag {
-    Dn = 1,
-    UlDr = 2,
-    ExactLeft = 4,
-    ExactRight = 8,
-    ExactTop = 16,
-    ExactBottom = 32,
-}
-
-#[derive(Debug, Default, Copy, Clone)]
-pub struct PolylineSegment {
-    c: i64,
-    a: i32,
-    b: i32,
-    scale: i32,
-    flags: BitFlags<SegFlag>,
-    x_min: i32,
-    x_max: i32,
-    y_min: i32,
-    y_max: i32,
-}
-
-impl PolylineSegment {
-    fn move_x(&mut self, x: i32) {
-        self.x_min -= x;
-        self.x_max -= x;
-        self.x_min = self.x_min.max(0);
-        self.c = i64_mul(self.a, x);
-
-        // should be const
-        let test: BitFlags<SegFlag> = SegFlag::ExactLeft | SegFlag::UlDr;
-        if self.y_min == 0 && self.flags == test {
-            self.flags.remove(SegFlag::ExactTop);
-        }
-    }
-
-    fn split_horz(&self, x: i32) -> (Self, Self) {
-        assert!(x > self.x_min && x < self.x_max);
-
-        let (mut line, mut next) = (*self, *self);
-        next.c = i64_mul(line.a, x);
-        next.x_min = 0;
-        next.x_max -= x;
-        line.x_max = x;
-
-        line.flags.remove(SegFlag::ExactTop);
-        next.flags.remove(SegFlag::ExactBottom);
-        if line.flags.contains(SegFlag::UlDr) {
-            std::mem::swap(&mut line.flags, &mut next.flags);
-        }
-        line.flags.insert(SegFlag::ExactRight);
-        next.flags.insert(SegFlag::ExactLeft);
-
-        (line, next)
-    }
-
-    fn check_left(&self, x: i32) -> bool {
-        if self.flags.contains(SegFlag::ExactLeft) {
-            return self.x_min >= x;
-        }
-        let y = if self.flags.contains(SegFlag::UlDr) {
-            self.y_min
-        } else {
-            self.y_max
-        };
-        let mut cc = self.c - i64_mul(self.a, x) - i64_mul(self.b, y);
-        if self.a > 0 {
-            cc = -cc;
-        }
-        cc >= 0
-    }
-
-    fn check_right(&self, x: i32) -> bool {
-        if self.flags.contains(SegFlag::ExactRight) {
-            return self.x_max <= x;
-        }
-        let y = if self.flags.contains(SegFlag::UlDr) {
-            self.y_max
-        } else {
-            self.y_min
-        };
-        let mut cc = self.c - i64_mul(self.a, x) - i64_mul(self.b, y);
-        if self.a > 0 {
-            cc = -cc;
-        }
-        cc >= 0
-    }
-}
+pub use super::polyline::Segment as PolylineSegment;
+use super::polyline::SegmentFlag as SegFlag;
 
 #[derive(BitFlags, Copy, Clone, Debug, PartialEq, Eq)]
 #[repr(u32)]
@@ -193,20 +106,6 @@ struct OutlineSegment {
     r: Vector,
     r2: i64,
     er: i64,
-}
-
-#[inline]
-fn i64_mul(a: i32, b: i32) -> i64 {
-    a as i64 * b as i64
-}
-
-#[inline]
-fn abs(n: i32) -> u32 {
-    match n {
-        -2147483648 => 2147483648,
-        -2147483647..=-1 => -n as u32,
-        0..=2147483647 => n as u32,
-    }
 }
 
 impl OutlineSegment {
