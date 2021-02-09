@@ -1,3 +1,5 @@
+pub(super) mod weirdvec;
+
 #[inline]
 pub(super) fn align(alignment: usize, s: usize) -> usize {
     if s > usize::MAX - (alignment - 1) {
