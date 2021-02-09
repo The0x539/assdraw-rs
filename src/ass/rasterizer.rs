@@ -285,8 +285,9 @@ impl RasterizerData {
         self.add_cubic(a) && self.add_cubic(b)
     }
 
-    pub fn fill<Engine: BitmapEngine>(
+    pub fn fill(
         &mut self,
+        engine: &impl BitmapEngine,
         buf: &mut [u8],
         x0: i32,
         y0: i32,
@@ -295,8 +296,8 @@ impl RasterizerData {
         stride: isize,
     ) {
         assert!(width > 0 && height > 0);
-        assert_ne!(0, width & ((1 << Engine::TILE_ORDER) - 1));
-        assert_ne!(0, height & ((1 << Engine::TILE_ORDER) - 1));
+        assert_ne!(0, width & ((1 << engine.tile_order()) - 1));
+        assert_ne!(0, height & ((1 << engine.tile_order()) - 1));
         let (x0, y0) = (x0 * 1 << 6, y0 * 1 << 6);
 
         for line in &mut self.linebuf[0] {
@@ -349,33 +350,35 @@ impl RasterizerData {
         assert_eq!(self.linebuf[0].len(), n_lines[0] + n_lines[1]); // ???
         self.linebuf[1].clear(); // okay, I now understand how the linebuf works
 
-        self.fill_level::<Engine>(buf, width, height, stride, 0, n_lines, winding);
+        self.fill_level(engine, buf, width, height, stride, 0, n_lines, winding);
     }
 
-    fn fill_solid<Engine: BitmapEngine>(
+    fn fill_solid(
+        engine: &impl BitmapEngine,
         mut buf: &mut [u8],
         width: i32,
         height: i32,
         stride: isize,
         set: i32,
     ) {
-        assert_ne!(0, width & ((1 << Engine::TILE_ORDER) - 1));
-        assert_ne!(0, height & ((1 << Engine::TILE_ORDER) - 1));
+        assert_ne!(0, width & ((1 << engine.tile_order()) - 1));
+        assert_ne!(0, height & ((1 << engine.tile_order()) - 1));
 
-        let step: isize = 1 << Engine::TILE_ORDER;
+        let step: isize = 1 << engine.tile_order();
         let tile_stride: isize = stride * step;
-        let width = width >> Engine::TILE_ORDER;
-        let height = height >> Engine::TILE_ORDER;
+        let width = width >> engine.tile_order();
+        let height = height >> engine.tile_order();
         for _y in 0..height {
             for x in 0..width {
                 let i = x as usize * step as usize;
-                Engine::fill_solid(&mut buf[i..], stride, set);
+                engine.fill_solid(&mut buf[i..], stride, set);
             }
             buf = &mut buf[tile_stride as usize..];
         }
     }
 
-    fn fill_halfplane<Engine: BitmapEngine>(
+    fn fill_halfplane(
+        engine: &impl BitmapEngine,
         mut buf: &mut [u8],
         width: i32,
         height: i32,
@@ -385,42 +388,44 @@ impl RasterizerData {
         c: i64,
         scale: i32,
     ) {
-        assert_ne!(0, width & ((1 << Engine::TILE_ORDER) - 1));
-        assert_ne!(0, height & ((1 << Engine::TILE_ORDER) - 1));
+        assert_ne!(0, width & ((1 << engine.tile_order()) - 1));
+        assert_ne!(0, height & ((1 << engine.tile_order()) - 1));
 
-        if width == 1 << Engine::TILE_ORDER && height == 1 << Engine::TILE_ORDER {
-            Engine::fill_halfplane(buf, stride, a, b, c, scale);
+        if width == 1 << engine.tile_order() && height == 1 << engine.tile_order() {
+            engine.fill_halfplane(buf, stride, a, b, c, scale);
             return;
         }
 
-        let size: i64 = i64::from(abs(a) + abs(b)) << (Engine::TILE_ORDER + 5);
-        let offs: i64 = (a as i64 + b as i64) * (1 << (Engine::TILE_ORDER + 5));
+        let size: i64 = i64::from(abs(a) + abs(b)) << (engine.tile_order() + 5);
+        let offs: i64 = (a as i64 + b as i64) * (1 << (engine.tile_order() + 5));
 
-        let step: isize = 1 << Engine::TILE_ORDER;
-        let tile_stride: isize = stride * (1 << Engine::TILE_ORDER);
-        let width = width >> Engine::TILE_ORDER;
-        let height = height >> Engine::TILE_ORDER;
+        let step: isize = 1 << engine.tile_order();
+        let tile_stride: isize = stride * (1 << engine.tile_order());
+        let width = width >> engine.tile_order();
+        let height = height >> engine.tile_order();
 
         for y in 0..height {
             for x in 0..width {
-                let cc: i64 = c - (i64_mul(a, x) + i64_mul(b, y)) * (1 << (Engine::TILE_ORDER + 6));
+                let cc: i64 =
+                    c - (i64_mul(a, x) + i64_mul(b, y)) * (1 << (engine.tile_order() + 6));
                 let offs_c: i64 = offs - cc;
                 let abs_c = offs_c.abs();
 
                 let i = x as usize * step as usize;
                 if abs_c < size {
-                    Engine::fill_halfplane(&mut buf[i..], stride, a, b, cc, scale);
+                    engine.fill_halfplane(&mut buf[i..], stride, a, b, cc, scale);
                 } else {
                     let set = ((offs_c >> 32) as i32 ^ scale) as u32 & 0x8000_0000;
-                    Engine::fill_solid(&mut buf[i..], stride, set as i32);
+                    engine.fill_solid(&mut buf[i..], stride, set as i32);
                 }
             }
             buf = &mut buf[tile_stride as usize..];
         }
     }
 
-    fn fill_level<Engine: BitmapEngine>(
+    fn fill_level(
         &mut self,
+        engine: &impl BitmapEngine,
         buf: &mut [u8],
         width: i32,
         height: i32,
@@ -433,8 +438,8 @@ impl RasterizerData {
 
         assert!(width > 0 && height > 0);
         assert!(index < 2 && total_lines <= self.linebuf[index].len());
-        assert_ne!(0, width & ((1 << Engine::TILE_ORDER) - 1));
-        assert_ne!(0, height & ((1 << Engine::TILE_ORDER) - 1));
+        assert_ne!(0, width & ((1 << engine.tile_order()) - 1));
+        assert_ne!(0, height & ((1 << engine.tile_order()) - 1));
 
         let (linebuf, other_linebuf) = {
             let (a, b) = self.linebuf.split_at_mut(1);
@@ -473,7 +478,8 @@ impl RasterizerData {
         let flags1 = get_fill_flags(line1, winding[1]);
         let flags = (flags0 | flags1) ^ FillFlag::Complex;
         if flags.intersects(FillFlag::Solid | FillFlag::Complex) {
-            Self::fill_solid::<Engine>(
+            Self::fill_solid(
+                engine,
                 buf,
                 width,
                 height,
@@ -489,37 +495,37 @@ impl RasterizerData {
                 line[0]
             };
             let (a, b, c, scale) = line_fields!(l, flags);
-            Self::fill_halfplane::<Engine>(buf, width, height, stride, a, b, c, scale);
+            Self::fill_halfplane(engine, buf, width, height, stride, a, b, c, scale);
             done!();
         }
-        if width == 1 << Engine::TILE_ORDER && height == 1 << Engine::TILE_ORDER {
+        if width == 1 << engine.tile_order() && height == 1 << engine.tile_order() {
             if !flags1.contains(FillFlag::Complex) {
                 // we checked earlier that line's bounds are correct
-                Engine::fill_generic(buf, stride, &line[..], winding[0]);
+                engine.fill_generic(buf, stride, &line[..], winding[0]);
                 done!();
             }
             if !flags0.contains(FillFlag::Complex) {
-                Engine::fill_generic(buf, stride, &line1[..], winding[1]);
+                engine.fill_generic(buf, stride, &line1[..], winding[1]);
                 done!();
             }
 
             if flags0.contains(FillFlag::Generic) {
-                Engine::fill_generic(buf, stride, &line[..], winding[0]);
+                engine.fill_generic(buf, stride, &line[..], winding[0]);
             } else {
                 let (a, b, c, scale) = line_fields!(line[0], flags0);
-                Engine::fill_halfplane(buf, stride, a, b, c, scale);
+                engine.fill_halfplane(buf, stride, a, b, c, scale);
             }
 
             let tile = &mut self.tile[..];
 
             if flags1.contains(FillFlag::Generic) {
-                Engine::fill_generic(tile, width as _, &line1[..], winding[1]);
+                engine.fill_generic(tile, width as _, &line1[..], winding[1]);
             } else {
                 let (a, b, c, scale) = line_fields!(line1[0], flags1);
-                Engine::fill_halfplane(tile, width as _, a, b, c, scale);
+                engine.fill_halfplane(tile, width as _, a, b, c, scale);
             }
 
-            Engine::add_bitmaps(buf, stride, tile, width as _, height as _, width as _);
+            engine.add_bitmaps(buf, stride, tile, width as _, height as _, width as _);
             done!();
         }
 
@@ -554,10 +560,13 @@ impl RasterizerData {
 
         let (buf, buf1) = buf.split_at_mut(split_idx);
 
-        self.fill_level::<Engine>(buf, width, height, stride, index, n_next[0], winding);
+        self.fill_level(
+            engine, buf, width, height, stride, index, n_next[0], winding,
+        );
         assert_eq!(self.linebuf[index].len(), offs);
 
-        self.fill_level::<Engine>(
+        self.fill_level(
+            engine,
             buf1,
             width1,
             height1,
