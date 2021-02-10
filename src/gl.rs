@@ -19,6 +19,7 @@ use abstraction::{
     error::check_errors,
     program::Program,
     shader::{Shader, ShaderType},
+    texture::{Texture, TextureTarget},
     vertex_array::VertexArray,
 };
 
@@ -44,10 +45,12 @@ pub struct OpenGlCanvas {
     draw_prgm: OnceCell<Program>,
 
     img_vb: OnceCell<Buffer>,
-    draw_vb: OnceCell<Buffer>,
+    points_vb: OnceCell<Buffer>,
 
     img_vao: OnceCell<VertexArray>,
-    draw_vao: OnceCell<VertexArray>,
+    points_vao: OnceCell<VertexArray>,
+
+    img_tex: OnceCell<Texture>,
 
     drawing: RefCell<Vec<f32>>,
 
@@ -80,13 +83,13 @@ impl OpenGlCanvas {
 
             self.drawing.replace(vec![]);
 
-            let draw_vb = Buffer::new();
-            self.draw_vb.set(draw_vb).unwrap();
+            let points_vb = Buffer::new();
+            self.points_vb.set(points_vb).unwrap();
             self.update_drawing();
 
-            let draw_vao = VertexArray::new();
-            draw_vao.bind();
-            self.draw_vao.set(draw_vao).unwrap();
+            let points_vao = VertexArray::new();
+            points_vao.bind();
+            self.points_vao.set(points_vao).unwrap();
             gl::EnableVertexAttribArray(0);
             let stride = mem::size_of::<f32>() * 2;
             gl::VertexAttribPointer(0, 2, gl::FLOAT, 0, stride as _, ptr::null());
@@ -102,9 +105,9 @@ impl OpenGlCanvas {
             gl::EnableVertexAttribArray(0);
             gl::VertexAttribPointer(0, 2, gl::FLOAT, 0, stride as _, ptr::null());
 
-            let mut tex = 0;
-            gl::GenTextures(1, &mut tex);
-            gl::BindTexture(gl::TEXTURE_RECTANGLE, tex);
+            let img_tex = Texture::new();
+            img_tex.bind(TextureTarget::Rectangle);
+            self.img_tex.set(img_tex).unwrap();
 
             gl::PointSize(5.0);
 
@@ -130,9 +133,10 @@ impl OpenGlCanvas {
             self.img_vao.get().unwrap().bind();
             gl::UseProgram(**self.img_prgm.get().unwrap());
             self.update_dimension_uniforms();
+            self.img_tex.get().unwrap().bind(TextureTarget::Rectangle);
             gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
 
-            self.draw_vao.get().unwrap().bind();
+            self.points_vao.get().unwrap().bind();
             gl::UseProgram(**self.draw_prgm.get().unwrap());
             self.update_dimension_uniforms();
             gl::DrawArrays(gl::POINTS, 0, self.drawing.borrow().len() as i32 / 2);
@@ -213,6 +217,7 @@ impl OpenGlCanvas {
         ];
 
         unsafe {
+            self.img_tex.get().unwrap().bind(TextureTarget::Rectangle);
             gl::TexImage2D(
                 gl::TEXTURE_RECTANGLE,
                 0,
@@ -240,7 +245,7 @@ impl OpenGlCanvas {
 
     pub fn update_drawing(&self) {
         unsafe {
-            self.draw_vb.get().unwrap().bind(BufferTarget::Array);
+            self.points_vb.get().unwrap().bind(BufferTarget::Array);
             Buffer::buffer_data(
                 BufferTarget::Array,
                 self.drawing.borrow().as_slice(),
