@@ -46,11 +46,14 @@ pub struct OpenGlCanvas {
 
     img_vb: OnceCell<Buffer>,
     points_vb: OnceCell<Buffer>,
+    shape_vb: OnceCell<Buffer>,
 
     img_vao: OnceCell<VertexArray>,
     points_vao: OnceCell<VertexArray>,
+    shape_vao: OnceCell<VertexArray>,
 
     img_tex: OnceCell<Texture>,
+    shape_tex: OnceCell<Texture>,
 
     drawing: RefCell<Vec<f32>>,
 
@@ -109,6 +112,21 @@ impl OpenGlCanvas {
             img_tex.bind(TextureTarget::Rectangle);
             self.img_tex.set(img_tex).unwrap();
 
+            let shape_vb = Buffer::new();
+            shape_vb.bind(BufferTarget::Array);
+            Buffer::buffer_data(BufferTarget::Array, &[0_f32; 8], Usage::StaticDraw).unwrap();
+            self.shape_vb.set(shape_vb).unwrap();
+
+            let shape_vao = VertexArray::new();
+            shape_vao.bind();
+            self.shape_vao.set(shape_vao).unwrap();
+            gl::EnableVertexAttribArray(0);
+            gl::VertexAttribPointer(0, 2, gl::FLOAT, 0, stride as _, ptr::null());
+
+            let shape_tex = Texture::new();
+            shape_tex.bind(TextureTarget::Rectangle);
+            self.shape_tex.set(shape_tex).unwrap();
+
             gl::PointSize(5.0);
 
             let default_dims = Dimensions {
@@ -134,6 +152,11 @@ impl OpenGlCanvas {
             gl::UseProgram(**self.img_prgm.get().unwrap());
             self.update_dimension_uniforms();
             self.img_tex.get().unwrap().bind(TextureTarget::Rectangle);
+            gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
+
+            self.shape_vao.get().unwrap().bind();
+            self.update_dimension_uniforms();
+            self.shape_tex.get().unwrap().bind(TextureTarget::Rectangle);
             gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
 
             self.points_vao.get().unwrap().bind();
@@ -252,6 +275,83 @@ impl OpenGlCanvas {
                 Usage::StaticDraw,
             )
             .unwrap();
+        }
+
+        let points = self.drawing.borrow();
+        if points.len() < 6 {
+            return;
+        }
+
+        let mut text = format!("m {} {} l", points[0], points[1]);
+        for point in &points[2..] {
+            use std::fmt::Write;
+            write!(&mut text, " {}", point).unwrap();
+        }
+
+        let (outline, bbox) = crate::drawing::parse_drawing(text);
+        let x0 = bbox.x_min as f32 / 64.0;
+        let x1 = bbox.x_max as f32 / 64.0;
+        let y0 = bbox.y_min as f32 / 64.0;
+        let y1 = bbox.y_max as f32 / 64.0;
+        let (width, height) = dbg!((x1 - x0, y1 - y0));
+
+        let mut rasterizer = ab_glyph_rasterizer::Rasterizer::new(width as _, height as _);
+
+        println!("{:?}", outline);
+
+        for segment in outline.segments() {
+            use crate::ass::outline::{Segment, Vector};
+            use ab_glyph_rasterizer::Point;
+            let cnv = |p: Vector| -> Point {
+                let x = p.x as f32 / 64.0;
+                let y = p.y as f32 / 64.0;
+                (x - x0, y - y0).into()
+            };
+            match segment {
+                Segment::LineSegment(p0, p1) => {
+                    let (p_0, p_1) = (cnv(p0), cnv(p1));
+                    println!("{:?} {:?}", p_0, p_1);
+                    rasterizer.draw_line(cnv(p0), cnv(p1));
+                }
+                Segment::QuadSpline(p0, p1, p2) => {
+                    rasterizer.draw_quad(cnv(p0), cnv(p1), cnv(p2));
+                }
+                Segment::CubicSpline(p0, p1, p2, p3) => {
+                    rasterizer.draw_cubic(cnv(p0), cnv(p1), cnv(p2), cnv(p3));
+                }
+            }
+        }
+
+        let mut img_buf = vec![0u32; width as usize * height as usize];
+        rasterizer.for_each_pixel(|i, v| {
+            let v2 = if v == 0.0 { 0x5C94C87F_u32 } else { 0 };
+            img_buf[i] = v2;
+        });
+
+        unsafe {
+            #[rustfmt::skip]
+            let vertex_data = &[
+                x0, y0,
+                x1, y0,
+                x0, y1,
+                x1, y1,
+            ];
+
+            self.shape_tex.get().unwrap().bind(TextureTarget::Rectangle);
+            gl::TexImage2D(
+                gl::TEXTURE_RECTANGLE,
+                0,
+                gl::RGB8 as _,
+                width as _,
+                height as _,
+                0,
+                gl::BGRA,
+                gl::UNSIGNED_INT_8_8_8_8,
+                img_buf.as_ptr().cast(),
+            );
+
+            self.shape_vb.get().unwrap().bind(BufferTarget::Array);
+            Buffer::buffer_data(BufferTarget::Array, vertex_data, Usage::StaticDraw).unwrap();
         }
     }
 }

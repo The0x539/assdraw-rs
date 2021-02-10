@@ -80,14 +80,12 @@ fn add_curve(
         p[2] -= p12;
     }
 
-    if !started {
-        outline.add_point(p[0], None).unwrap();
-    }
+    outline
+        .add_point(p[0], Some(SegmentType::CubicSpline))
+        .unwrap();
     outline.add_point(p[1], None).unwrap();
     outline.add_point(p[2], None).unwrap();
-    outline
-        .add_point(p[3], Some(SegmentType::CubicSpline))
-        .unwrap();
+    outline.add_point(p[3], None).unwrap();
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -177,12 +175,11 @@ fn tokenize_drawing(text: impl AsRef<[u8]>) -> Vec<DrawingToken> {
 
 pub fn parse_drawing(text: impl AsRef<[u8]>) -> (Outline, Rect) {
     let mut cbox = Rect::default();
+    cbox.reset();
     let mut outline = Outline::default();
 
     let mut started = false;
     let mut pen = Vector::default();
-
-    let mut prev = None::<DrawingToken>;
 
     let mut tokens = tokenize_drawing(text).into_iter().multipeek();
     while let Some(token) = tokens.next() {
@@ -203,23 +200,20 @@ pub fn parse_drawing(text: impl AsRef<[u8]>) -> (Outline, Rect) {
             TokenType::Line => {
                 let to = token.point;
                 cbox.update(to.x, to.y, to.x, to.y);
-                if !started {
-                    outline.add_point(pen, None).unwrap();
-                }
                 outline
-                    .add_point(to, Some(SegmentType::LineSegment))
+                    .add_point(pen, Some(SegmentType::LineSegment))
                     .unwrap();
+                outline.add_point(to, None).unwrap();
+                pen = to;
                 started = true;
             }
             TokenType::CubicBezier | TokenType::BSpline => {
                 let ty = token.token_type;
-                match (prev, token, tokens.peek().copied(), tokens.peek().copied()) {
-                    (Some(t0), t1, Some(t2), Some(t3))
-                        if t2.token_type == ty && t3.token_type == ty =>
-                    {
+                match (token, tokens.peek().copied(), tokens.peek().copied()) {
+                    (t1, Some(t2), Some(t3)) if t2.token_type == ty && t3.token_type == ty => {
                         tokens.next();
                         tokens.next();
-                        let points = [t0.point, t1.point, t2.point, t3.point];
+                        let points = [pen, t1.point, t2.point, t3.point];
                         let is_spline = ty == TokenType::BSpline;
                         add_curve(&mut outline, &mut cbox, points, is_spline, started);
                     }
@@ -227,13 +221,15 @@ pub fn parse_drawing(text: impl AsRef<[u8]>) -> (Outline, Rect) {
                         tokens.reset_peek();
                     }
                 }
+                // consider doing this inside the conditional
+                pen = token.point;
+                started = true;
             }
         }
-        prev = Some(token);
     }
 
     if started {
-        outline.add_segment(SegmentType::LineSegment);
+        //outline.add_segment(SegmentType::LineSegment);
         outline.close_contour();
     }
 
