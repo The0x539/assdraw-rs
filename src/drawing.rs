@@ -108,6 +108,11 @@ fn tokenize_drawing(text: impl AsRef<[u8]>) -> Vec<DrawingToken> {
     let mut spline_start = None::<usize>;
 
     while p != [] {
+        if p[0] == b' ' {
+            p = &p[1..];
+            continue;
+        }
+
         let mut got_coord = false;
         if let (b'c', Some(start)) = (p[0], &mut spline_start) {
             let mut should_finish_spline = true;
@@ -127,6 +132,7 @@ fn tokenize_drawing(text: impl AsRef<[u8]>) -> Vec<DrawingToken> {
                     *start += 1;
                 }
             }
+            p = &p[1..];
         } else if is_set == CoordStatus::None && strtod(&mut p, &mut val) {
             point.x = double_to_d6(val);
             is_set = CoordStatus::GotX;
@@ -148,6 +154,7 @@ fn tokenize_drawing(text: impl AsRef<[u8]>) -> Vec<DrawingToken> {
                 // TokenType::ExtendBSpline is ignored for reasons briefly documented in libass
                 _ => (),
             }
+            p = &p[1..];
         }
 
         // Ignore the odd extra value, it makes no sense.

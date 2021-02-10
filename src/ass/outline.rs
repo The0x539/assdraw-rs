@@ -208,7 +208,7 @@ impl Outline {
             self.segments.push(segment);
         }
         if self.start_of_final_contour.is_none() {
-            self.start_of_final_contour = Some(self.segments.len() - 1);
+            self.start_of_final_contour = Some(self.points.len() - 1);
         }
         Ok(())
     }
@@ -239,6 +239,7 @@ impl Outline {
     }
 }
 
+#[derive(Debug)]
 pub enum Segment {
     LineSegment(Vector, Vector),
     QuadSpline(Vector, Vector, Vector),
