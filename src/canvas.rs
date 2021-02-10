@@ -48,7 +48,8 @@ pub struct Canvas {
     #[nwg_layout_item(layout: grid, col: 3, row: 2)]
     pub paste_image_btn: nwg::Button,
 
-    dragging: Cell<bool>,
+    left_dragging: Cell<bool>,
+    right_dragging: Cell<bool>,
     pre_drag_pos: Cell<[f32; 2]>,
     drag_start_pos: Cell<(i32, i32)>,
 }
@@ -74,17 +75,40 @@ impl Canvas {
         nwg::GlobalCursor::local_position(&self.canvas, None)
     }
 
+    fn is_dragging(&self) -> bool {
+        self.left_dragging.get() || self.right_dragging.get()
+    }
+
+    fn add_point_at_cursor(&self) {
+        let (x, y) = self.cursor_pos();
+        let dims = self.canvas.get_dimensions();
+        let (scene_x, scene_y) = (
+            dims.scene_pos[0] + x as f32 / dims.scale,
+            dims.scene_pos[1] + y as f32 / dims.scale,
+        );
+        self.canvas.add_point(scene_x, scene_y);
+    }
+
     pub fn mouse_move(&self) {
-        if self.dragging.get() {
-            let [x0, y0] = self.pre_drag_pos.get();
-            let (dx0, dy0) = self.drag_start_pos.get();
-            let (dx1, dy1) = self.cursor_pos();
-            let (dx, dy) = (dx1 - dx0, dy1 - dy0);
+        if !self.is_dragging() {
+            return;
+        }
+
+        let [x0, y0] = self.pre_drag_pos.get();
+        let (dx0, dy0) = self.drag_start_pos.get();
+        let (dx1, dy1) = self.cursor_pos();
+        let (dx, dy) = (dx1 - dx0, dy1 - dy0);
+
+        if self.right_dragging.get() {
             self.canvas.update_dimensions(|dims| {
                 let x = x0 - (dx as f32) / dims.scale;
                 let y = y0 - (dy as f32) / dims.scale;
                 dims.scene_pos = [x, y];
             })
+        }
+        if self.left_dragging.get() {
+            self.canvas.pop_point();
+            self.add_point_at_cursor();
         }
     }
 
@@ -93,27 +117,30 @@ impl Canvas {
             nwg::Event::OnMousePress(ev) => ev,
             _ => return, // should be unreachable
         };
+        let was_dragging = self.is_dragging();
         match ev {
             nwg::MousePressEvent::MousePressRightDown => {
+                self.right_dragging.set(true);
+            }
+            nwg::MousePressEvent::MousePressRightUp => {
+                self.right_dragging.set(false);
+            }
+            nwg::MousePressEvent::MousePressLeftDown => {
+                self.add_point_at_cursor();
+                self.left_dragging.set(true);
+            }
+            nwg::MousePressEvent::MousePressLeftUp => {
+                self.left_dragging.set(false);
+            }
+        }
+        match (was_dragging, self.is_dragging()) {
+            (false, true) => {
                 nwg::GlobalCursor::set_capture(&self.canvas.handle);
-                self.dragging.set(true);
                 self.drag_start_pos.set(self.cursor_pos());
                 self.pre_drag_pos
                     .set(self.canvas.get_dimensions().scene_pos);
             }
-            nwg::MousePressEvent::MousePressRightUp => {
-                nwg::GlobalCursor::release();
-                self.dragging.set(false);
-            }
-            nwg::MousePressEvent::MousePressLeftDown => {
-                let (x, y) = self.cursor_pos();
-                let dims = self.canvas.get_dimensions();
-                let (scene_x, scene_y) = (
-                    dims.scene_pos[0] + x as f32 / dims.scale,
-                    dims.scene_pos[1] + y as f32 / dims.scale,
-                );
-                self.canvas.add_point(scene_x, scene_y);
-            }
+            (true, false) => nwg::GlobalCursor::release(),
             _ => (),
         }
     }
@@ -201,7 +228,7 @@ impl Canvas {
                 mouse_scene_y - (mouse_y / new_scale),
             ];
 
-            if self.dragging.get() {
+            if self.right_dragging.get() {
                 self.pre_drag_pos.set(new_scene_pos);
                 self.drag_start_pos.set(self.cursor_pos());
             }

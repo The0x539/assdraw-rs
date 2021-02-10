@@ -280,6 +280,15 @@ impl OpenGlCanvas {
         self.update_drawing();
     }
 
+    pub fn pop_point(&self) -> Option<(f32, f32)> {
+        let mut drawing = self.drawing.borrow_mut();
+        let x = drawing.pop()?;
+        let y = drawing.pop().unwrap();
+        drop(drawing);
+        self.update_drawing();
+        Some((x, y))
+    }
+
     pub fn update_drawing(&self) {
         unsafe {
             self.points_vb.get().unwrap().bind(BufferTarget::Array);
