@@ -1,6 +1,6 @@
 use itertools::Itertools;
 
-use crate::ass::outline::{Outline, Rect, SegmentType, Vector};
+use crate::ass::outline::{Rect, Segment, Vector};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
@@ -58,13 +58,7 @@ fn double_to_d6(val: f64) -> i32 {
     (val * 64.0) as i32
 }
 
-fn add_curve(
-    outline: &mut Outline,
-    cbox: &mut Rect,
-    mut p: [Vector; 4],
-    spline: bool,
-    started: bool,
-) {
+fn add_curve(segments: &mut Vec<Segment>, cbox: &mut Rect, mut p: [Vector; 4], spline: bool) {
     for i in 0..4 {
         cbox.update(p[i].x, p[i].y, p[i].x, p[i].y);
     }
@@ -80,12 +74,7 @@ fn add_curve(
         p[2] -= p12;
     }
 
-    outline
-        .add_point(p[0], Some(SegmentType::CubicSpline))
-        .unwrap();
-    outline.add_point(p[1], None).unwrap();
-    outline.add_point(p[2], None).unwrap();
-    outline.add_point(p[3], None).unwrap();
+    segments.push(Segment::CubicSpline(p[0], p[1], p[2], p[3]));
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -173,39 +162,35 @@ fn tokenize_drawing(text: impl AsRef<[u8]>) -> Vec<DrawingToken> {
     tokens
 }
 
-pub fn parse_drawing(text: impl AsRef<[u8]>) -> (Outline, Rect) {
+pub fn parse_drawing(text: impl AsRef<[u8]>) -> (Vec<Segment>, Rect) {
     let mut cbox = Rect::default();
     cbox.reset();
-    let mut outline = Outline::default();
+    let mut segments = Vec::new();
 
-    let mut started = false;
     let mut pen = Vector::default();
+    let mut shape_start = None;
 
     let mut tokens = tokenize_drawing(text).into_iter().multipeek();
     while let Some(token) = tokens.next() {
         match token.token_type {
             TokenType::MoveNc => {
+                // I honestly have no idea how this one is supposed to be used.
                 pen = token.point;
                 cbox.update(pen.x, pen.y, pen.x, pen.y);
             }
             TokenType::Move => {
+                if let Some(start) = shape_start.take() {
+                    segments.push(Segment::LineSegment(pen, start));
+                }
                 pen = token.point;
                 cbox.update(pen.x, pen.y, pen.x, pen.y);
-                if started {
-                    outline.add_segment(SegmentType::LineSegment);
-                    outline.close_contour();
-                    started = false;
-                }
             }
             TokenType::Line => {
                 let to = token.point;
                 cbox.update(to.x, to.y, to.x, to.y);
-                outline
-                    .add_point(pen, Some(SegmentType::LineSegment))
-                    .unwrap();
-                outline.add_point(to, None).unwrap();
+                segments.push(Segment::LineSegment(pen, to));
+                shape_start = shape_start.or(Some(pen));
                 pen = to;
-                started = true;
             }
             TokenType::CubicBezier | TokenType::BSpline => {
                 let ty = token.token_type;
@@ -215,23 +200,23 @@ pub fn parse_drawing(text: impl AsRef<[u8]>) -> (Outline, Rect) {
                         tokens.next();
                         let points = [pen, t1.point, t2.point, t3.point];
                         let is_spline = ty == TokenType::BSpline;
-                        add_curve(&mut outline, &mut cbox, points, is_spline, started);
+                        add_curve(&mut segments, &mut cbox, points, is_spline);
+                        shape_start = shape_start.or(Some(pen));
+                        pen = t3.point;
                     }
                     _ => {
+                        // if the curve's cut short (e.g. `b 10 10 10 20 l 5 10`),
+                        // just ignore the token entirely
                         tokens.reset_peek();
                     }
                 }
-                // consider doing this inside the conditional
-                pen = token.point;
-                started = true;
             }
         }
     }
 
-    if started {
-        //outline.add_segment(SegmentType::LineSegment);
-        outline.close_contour();
+    if let Some(start) = shape_start.take() {
+        segments.push(Segment::LineSegment(pen, start));
     }
 
-    (outline, cbox)
+    (segments, cbox)
 }

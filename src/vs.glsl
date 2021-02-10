@@ -4,6 +4,7 @@
 layout (location=0) uniform vec2 screen_dims;
 layout (location=2) uniform vec2 scene_pos;
 layout (location=4) uniform float scale;
+layout (location=5) uniform vec2 drawing_pos;
 
 layout (location=0) in vec2 a_Position;
 
@@ -11,6 +12,8 @@ out vec2 v_Position;
 
 void main() {
 	vec2 pos = a_Position;
+
+	pos += drawing_pos;
 
 	pos -= scene_pos;
 	pos /= screen_dims;

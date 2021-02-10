@@ -58,6 +58,7 @@ pub struct OpenGlCanvas {
     drawing: RefCell<Vec<f32>>,
 
     dimensions: Cell<Dimensions>,
+    drawing_pos: Cell<[f32; 2]>,
 }
 
 impl OpenGlCanvas {
@@ -128,6 +129,10 @@ impl OpenGlCanvas {
             self.shape_tex.set(shape_tex).unwrap();
 
             gl::PointSize(5.0);
+            gl::Enable(gl::BLEND);
+            gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+            //gl::Enable(gl::DEPTH_TEST);
+            check_errors().unwrap();
 
             let default_dims = Dimensions {
                 screen_dims: [100.0, 100.0],
@@ -154,10 +159,21 @@ impl OpenGlCanvas {
             self.img_tex.get().unwrap().bind(TextureTarget::Rectangle);
             gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
 
+            gl::DepthMask(gl::TRUE);
             self.shape_vao.get().unwrap().bind();
             self.update_dimension_uniforms();
+            let pos_loc = self
+                .img_prgm
+                .get()
+                .unwrap()
+                .get_uniform_location(cstr!("drawing_pos"))
+                .unwrap()
+                .unwrap();
+            let pos = self.drawing_pos.get();
+            gl::Uniform2f(*pos_loc, pos[0], pos[1]);
             self.shape_tex.get().unwrap().bind(TextureTarget::Rectangle);
             gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
+            gl::Uniform2f(*pos_loc, 0.0, 0.0);
 
             self.points_vao.get().unwrap().bind();
             gl::UseProgram(**self.draw_prgm.get().unwrap());
@@ -288,18 +304,16 @@ impl OpenGlCanvas {
             write!(&mut text, " {}", point).unwrap();
         }
 
-        let (outline, bbox) = crate::drawing::parse_drawing(text);
+        let (segments, bbox) = crate::drawing::parse_drawing(text);
         let x0 = bbox.x_min as f32 / 64.0;
         let x1 = bbox.x_max as f32 / 64.0;
         let y0 = bbox.y_min as f32 / 64.0;
         let y1 = bbox.y_max as f32 / 64.0;
-        let (width, height) = dbg!((x1 - x0, y1 - y0));
+        let (width, height) = (x1 - x0, y1 - y0);
 
         let mut rasterizer = ab_glyph_rasterizer::Rasterizer::new(width as _, height as _);
 
-        println!("{:?}", outline);
-
-        for segment in outline.segments() {
+        for segment in segments {
             use crate::ass::outline::{Segment, Vector};
             use ab_glyph_rasterizer::Point;
             let cnv = |p: Vector| -> Point {
@@ -309,8 +323,6 @@ impl OpenGlCanvas {
             };
             match segment {
                 Segment::LineSegment(p0, p1) => {
-                    let (p_0, p_1) = (cnv(p0), cnv(p1));
-                    println!("{:?} {:?}", p_0, p_1);
                     rasterizer.draw_line(cnv(p0), cnv(p1));
                 }
                 Segment::QuadSpline(p0, p1, p2) => {
@@ -323,18 +335,30 @@ impl OpenGlCanvas {
         }
 
         let mut img_buf = vec![0u32; width as usize * height as usize];
-        rasterizer.for_each_pixel(|i, v| {
-            let v2 = if v == 0.0 { 0x5C94C87F_u32 } else { 0 };
-            img_buf[i] = v2;
+        rasterizer.for_each_pixel_2d(|x, y, v| {
+            let i = x as usize + (y as usize * width as usize);
+            let px = (v * 127.0) as u8;
+            img_buf[i] = u32::from_ne_bytes([px, px, 0, px]);
         });
 
+        self.drawing_pos.set([x0, y0]);
+
         unsafe {
+            /*
             #[rustfmt::skip]
             let vertex_data = &[
                 x0, y0,
                 x1, y0,
                 x0, y1,
                 x1, y1,
+            ];
+            */
+            #[rustfmt::skip]
+            let vertex_data = &[
+                0.0, 0.0,
+                width, 0.0,
+                0.0, height,
+                width, height,
             ];
 
             self.shape_tex.get().unwrap().bind(TextureTarget::Rectangle);
