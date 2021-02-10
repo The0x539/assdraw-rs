@@ -23,3 +23,6 @@ pub use buffer::Buffer;
 
 pub mod vertex_array;
 pub use vertex_array::VertexArray;
+
+pub mod texture;
+pub use texture::Texture;
