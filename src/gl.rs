@@ -131,7 +131,6 @@ impl OpenGlCanvas {
             gl::PointSize(5.0);
             gl::Enable(gl::BLEND);
             gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
-            //gl::Enable(gl::DEPTH_TEST);
             check_errors().unwrap();
 
             let default_dims = Dimensions {
@@ -159,7 +158,6 @@ impl OpenGlCanvas {
             self.img_tex.get().unwrap().bind(TextureTarget::Rectangle);
             gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
 
-            gl::DepthMask(gl::TRUE);
             self.shape_vao.get().unwrap().bind();
             self.update_dimension_uniforms();
             let pos_loc = self
@@ -338,7 +336,7 @@ impl OpenGlCanvas {
         rasterizer.for_each_pixel_2d(|x, y, v| {
             let i = x as usize + (y as usize * width as usize);
             let px = (v * 127.0) as u8;
-            img_buf[i] = u32::from_ne_bytes([px, px, 0, px]);
+            img_buf[i] = u32::from_ne_bytes([px, 127, 127, 127]);
         });
 
         self.drawing_pos.set([x0, y0]);
@@ -365,7 +363,7 @@ impl OpenGlCanvas {
             gl::TexImage2D(
                 gl::TEXTURE_RECTANGLE,
                 0,
-                gl::RGB8 as _,
+                gl::RGBA8 as _,
                 width as _,
                 height as _,
                 0,
