@@ -1,4 +1,4 @@
-use std::ops::{Add, AddAssign, Shr, ShrAssign, Sub};
+use std::ops::{Add, AddAssign, Div, Shr, ShrAssign, Sub, SubAssign};
 
 use itertools::Itertools;
 
@@ -78,6 +78,22 @@ impl AddAssign<i32> for Vector {
     }
 }
 
+impl AddAssign<Self> for Vector {
+    #[inline]
+    fn add_assign(&mut self, rhs: Self) {
+        self.x += rhs.x;
+        self.y += rhs.y;
+    }
+}
+
+impl SubAssign<Self> for Vector {
+    #[inline]
+    fn sub_assign(&mut self, rhs: Self) {
+        self.x -= rhs.x;
+        self.y -= rhs.y;
+    }
+}
+
 impl Shr<i32> for Vector {
     type Output = Self;
     #[inline]
@@ -93,6 +109,17 @@ impl ShrAssign<i32> for Vector {
     #[inline]
     fn shr_assign(&mut self, rhs: i32) {
         *self = *self >> rhs;
+    }
+}
+
+impl Div<i32> for Vector {
+    type Output = Self;
+    #[inline]
+    fn div(self, rhs: i32) -> Self::Output {
+        Self {
+            x: self.x / rhs,
+            y: self.y / rhs,
+        }
     }
 }
 

@@ -1,24 +1,24 @@
-use crate::ass::outline::Rect;
-use ab_glyph_rasterizer::Point;
+use itertools::Itertools;
 
-#[allow(dead_code)]
+use crate::ass::outline::{Outline, Rect, SegmentType, Vector};
+
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
-pub enum TokenType {
+enum TokenType {
     Move,
     MoveNc,
     Line,
     CubicBezier,
-    ConicBezier,
+    // ConicBezier,
     BSpline,
-    ExtendBSpline,
-    Close,
+    // ExtendBSpline,
+    // Close,
 }
 
 #[derive(Debug, Copy, Clone)]
-pub struct DrawingToken {
+struct DrawingToken {
     token_type: TokenType,
-    point: Point,
+    point: Vector,
 }
 
 fn strtod(p: &mut &[u8], val: &mut f64) -> bool {
@@ -31,6 +31,7 @@ fn strtod(p: &mut &[u8], val: &mut f64) -> bool {
         };
         match c {
             b'0'..=b'9' => i += 1,
+            b'-' if i == 0 => i += 1,
             b'.' if !seen_dot => {
                 i += 1;
                 seen_dot = true;
@@ -52,8 +53,41 @@ fn strtod(p: &mut &[u8], val: &mut f64) -> bool {
     }
 }
 
-fn double_to_d6(_val: f64) -> f32 {
-    todo!()
+#[inline]
+fn double_to_d6(val: f64) -> i32 {
+    (val * 64.0) as i32
+}
+
+fn add_curve(
+    outline: &mut Outline,
+    cbox: &mut Rect,
+    mut p: [Vector; 4],
+    spline: bool,
+    started: bool,
+) {
+    for i in 0..4 {
+        cbox.update(p[i].x, p[i].y, p[i].x, p[i].y);
+    }
+
+    if spline {
+        let p01 = (p[1] - p[0]) / 3;
+        let p12 = (p[2] - p[1]) / 3;
+        let p23 = (p[3] - p[2]) / 3;
+
+        p[0] = p[1] + ((p12 - p01) >> 1);
+        p[3] = p[2] + ((p23 - p12) >> 1);
+        p[1] += p12;
+        p[2] -= p12;
+    }
+
+    if !started {
+        outline.add_point(p[0], None).unwrap();
+    }
+    outline.add_point(p[1], None).unwrap();
+    outline.add_point(p[2], None).unwrap();
+    outline
+        .add_point(p[3], Some(SegmentType::CubicSpline))
+        .unwrap();
 }
 
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -68,7 +102,7 @@ fn tokenize_drawing(text: impl AsRef<[u8]>) -> Vec<DrawingToken> {
     let mut token_type = None::<TokenType>;
     let mut is_set = CoordStatus::None;
     let mut val = 0.0_f64;
-    let mut point = Point::default();
+    let mut point = Vector::default();
 
     let mut tokens = Vec::<DrawingToken>::new();
     let mut spline_start = None::<usize>;
@@ -109,7 +143,7 @@ fn tokenize_drawing(text: impl AsRef<[u8]>) -> Vec<DrawingToken> {
                 b'n' => token_type = Some(TokenType::MoveNc),
                 b'l' => token_type = Some(TokenType::Line),
                 b'b' => token_type = Some(TokenType::CubicBezier),
-                b'q' => token_type = Some(TokenType::ConicBezier),
+                // b'q' => token_type = Some(TokenType::ConicBezier),
                 b's' => token_type = Some(TokenType::BSpline),
                 // TokenType::ExtendBSpline is ignored for reasons briefly documented in libass
                 _ => (),
@@ -134,10 +168,67 @@ fn tokenize_drawing(text: impl AsRef<[u8]>) -> Vec<DrawingToken> {
     tokens
 }
 
-pub struct Segment;
+pub fn parse_drawing(text: impl AsRef<[u8]>) -> (Outline, Rect) {
+    let mut cbox = Rect::default();
+    let mut outline = Outline::default();
 
-#[allow(dead_code)]
-pub fn parse_drawing(text: &str) -> (Vec<Segment>, Rect) {
-    let _tokens = tokenize_drawing(text);
-    (vec![Segment], Rect::default())
+    let mut started = false;
+    let mut pen = Vector::default();
+
+    let mut prev = None::<DrawingToken>;
+
+    let mut tokens = tokenize_drawing(text).into_iter().multipeek();
+    while let Some(token) = tokens.next() {
+        match token.token_type {
+            TokenType::MoveNc => {
+                pen = token.point;
+                cbox.update(pen.x, pen.y, pen.x, pen.y);
+            }
+            TokenType::Move => {
+                pen = token.point;
+                cbox.update(pen.x, pen.y, pen.x, pen.y);
+                if started {
+                    outline.add_segment(SegmentType::LineSegment);
+                    outline.close_contour();
+                    started = false;
+                }
+            }
+            TokenType::Line => {
+                let to = token.point;
+                cbox.update(to.x, to.y, to.x, to.y);
+                if !started {
+                    outline.add_point(pen, None).unwrap();
+                }
+                outline
+                    .add_point(to, Some(SegmentType::LineSegment))
+                    .unwrap();
+                started = true;
+            }
+            TokenType::CubicBezier | TokenType::BSpline => {
+                let ty = token.token_type;
+                match (prev, token, tokens.peek().copied(), tokens.peek().copied()) {
+                    (Some(t0), t1, Some(t2), Some(t3))
+                        if t2.token_type == ty && t3.token_type == ty =>
+                    {
+                        tokens.next();
+                        tokens.next();
+                        let points = [t0.point, t1.point, t2.point, t3.point];
+                        let is_spline = ty == TokenType::BSpline;
+                        add_curve(&mut outline, &mut cbox, points, is_spline, started);
+                    }
+                    _ => {
+                        tokens.reset_peek();
+                    }
+                }
+            }
+        }
+        prev = Some(token);
+    }
+
+    if started {
+        outline.add_segment(SegmentType::LineSegment);
+        outline.close_contour();
+    }
+
+    (outline, cbox)
 }

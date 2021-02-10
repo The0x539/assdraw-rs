@@ -4,7 +4,7 @@ use nwg::NativeUi;
 
 pub mod ass;
 mod canvas;
-mod drawing;
+pub mod drawing;
 mod gl;
 
 pub use crate::gl::abstraction;
