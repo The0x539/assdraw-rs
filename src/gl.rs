@@ -6,11 +6,12 @@ use glutin::{
     dpi::PhysicalSize,
     platform::windows::RawContextExt,
 };
+use ab_glyph_rasterizer::Rasterizer;
 use cstr::cstr;
 use image::ImageDecoder;
 use once_cell::unsync::OnceCell;
 
-use std::cell::{Cell, RefCell};
+use std::cell::{Cell, Ref, RefCell, RefMut};
 use std::convert::TryInto;
 
 pub mod abstraction;
@@ -55,10 +56,27 @@ pub struct OpenGlCanvas {
     img_tex: OnceCell<Texture>,
     shape_tex: OnceCell<Texture>,
 
-    drawing: RefCell<Vec<f32>>,
+    drawing: RefCell<DrawingData>,
 
     dimensions: Cell<Dimensions>,
     drawing_pos: Cell<[f32; 2]>,
+}
+
+struct DrawingData {
+    // TODO: alpha-only data. should be faster
+    pixels: Vec<u32>,
+    points: Vec<f32>,
+    rasterizer: Rasterizer,
+}
+
+impl Default for DrawingData {
+    fn default() -> Self {
+        Self {
+            pixels: Vec::new(),
+            points: Vec::new(),
+            rasterizer: Rasterizer::new(0, 0),
+        }
+    }
 }
 
 impl OpenGlCanvas {
@@ -85,7 +103,7 @@ impl OpenGlCanvas {
             self.img_prgm.set(Program::build(&vs, &img_fs)).unwrap();
             self.draw_prgm.set(Program::build(&vs, &draw_fs)).unwrap();
 
-            self.drawing.replace(vec![]);
+            self.drawing.replace(Default::default());
 
             let points_vb = Buffer::new();
             self.points_vb.set(points_vb).unwrap();
@@ -148,6 +166,14 @@ impl OpenGlCanvas {
         self.ctx.get().map(f)
     }
 
+    fn drawing_points(&self) -> Ref<Vec<f32>> {
+        Ref::map(self.drawing.borrow(), |x| &x.points)
+    }
+
+    fn drawing_points_mut(&self) -> RefMut<Vec<f32>> {
+        RefMut::map(self.drawing.borrow_mut(), |x| &mut x.points)
+    }
+
     pub fn render(&self) {
         self.with_ctx(|ctx| unsafe {
             gl::Clear(gl::COLOR_BUFFER_BIT);
@@ -176,8 +202,8 @@ impl OpenGlCanvas {
             self.points_vao.get().unwrap().bind();
             gl::UseProgram(**self.draw_prgm.get().unwrap());
             self.update_dimension_uniforms();
-            gl::DrawArrays(gl::POINTS, 0, self.drawing.borrow().len() as i32 / 2);
-            gl::DrawArrays(gl::LINE_STRIP, 0, self.drawing.borrow().len() as i32 / 2);
+            gl::DrawArrays(gl::POINTS, 0, self.drawing_points().len() as i32 / 2);
+            gl::DrawArrays(gl::LINE_STRIP, 0, self.drawing_points().len() as i32 / 2);
 
             check_errors().unwrap();
 
@@ -273,34 +299,36 @@ impl OpenGlCanvas {
     }
 
     pub fn add_point(&self, x: f32, y: f32) {
-        let mut drawing = self.drawing.borrow_mut();
-        drawing.push(x);
-        drawing.push(y);
-        drop(drawing);
+        let mut points = self.drawing_points_mut();
+        points.push(x);
+        points.push(y);
+        drop(points);
         self.update_drawing();
     }
 
     pub fn pop_point(&self) -> Option<(f32, f32)> {
-        let mut drawing = self.drawing.borrow_mut();
-        let x = drawing.pop()?;
-        let y = drawing.pop().unwrap();
-        drop(drawing);
+        let mut points = self.drawing_points_mut();
+        let x = points.pop()?;
+        let y = points.pop().unwrap();
+        drop(points);
         self.update_drawing();
         Some((x, y))
     }
 
     pub fn update_drawing(&self) {
+        let drawing = self.drawing.borrow_mut();
+
         unsafe {
             self.points_vb.get().unwrap().bind(BufferTarget::Array);
             Buffer::buffer_data(
                 BufferTarget::Array,
-                self.drawing.borrow().as_slice(),
+                drawing.points.as_slice(),
                 Usage::StaticDraw,
             )
             .unwrap();
         }
 
-        let points = self.drawing.borrow();
+        let points = &drawing.points;
         if points.len() < 6 {
             return;
         }
@@ -318,7 +346,9 @@ impl OpenGlCanvas {
         let y1 = bbox.y_max as f32 / 64.0;
         let (width, height) = (x1 - x0, y1 - y0);
 
-        let mut rasterizer = ab_glyph_rasterizer::Rasterizer::new(width as _, height as _);
+        let (mut rasterizer, mut img_buf) =
+            RefMut::map_split(drawing, |r| (&mut r.rasterizer, &mut r.pixels));
+        rasterizer.reset(width as usize, height as usize);
 
         for segment in segments {
             use crate::ass::outline::{Segment, Vector};
@@ -341,7 +371,8 @@ impl OpenGlCanvas {
             }
         }
 
-        let mut img_buf = vec![0u32; width as usize * height as usize];
+        img_buf.clear();
+        img_buf.resize(width as usize * height as usize, 0);
         rasterizer.for_each_pixel_2d(|x, y, v| {
             let i = x as usize + (y as usize * width as usize);
             let px = (v * 127.0) as u8;
