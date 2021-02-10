@@ -20,4 +20,6 @@ aligned_box = "0.2.0"
 itertools = "0.10.0"
 enumflags2 = "0.6.4"
 ab_glyph_rasterizer = "0.1.4"
+vulkano = "0.20.0"
+winapi = "0.3.9"
 
