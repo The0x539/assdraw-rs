@@ -1,6 +1,6 @@
 use itertools::Itertools;
 
-use crate::ass::outline::{Rect, Segment, Vector};
+use crate::ass_outline::{Rect, Segment, Vector};
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]

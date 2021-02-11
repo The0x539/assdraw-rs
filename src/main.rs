@@ -2,9 +2,9 @@ use native_windows_gui as nwg;
 
 use nwg::NativeUi;
 
-pub mod ass;
+mod ass_outline;
 mod canvas;
-pub mod drawing;
+mod drawing;
 mod gl;
 
 pub use crate::gl::abstraction;
