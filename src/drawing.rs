@@ -162,6 +162,7 @@ fn tokenize_drawing(text: impl AsRef<[u8]>) -> Vec<DrawingToken> {
     tokens
 }
 
+#[allow(dead_code)]
 pub fn parse_drawing(text: impl AsRef<[u8]>) -> (Vec<Segment>, Rect) {
     let mut cbox = Rect::default();
     cbox.reset();

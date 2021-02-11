@@ -333,6 +333,7 @@ impl OpenGlCanvas {
             return;
         }
 
+        /*
         let mut text = format!("m {} {} l", points[0], points[1]);
         for point in &points[2..] {
             use std::fmt::Write;
@@ -340,6 +341,34 @@ impl OpenGlCanvas {
         }
 
         let (segments, bbox) = crate::drawing::parse_drawing(text);
+        */
+
+        use crate::ass_outline::{Segment, Vector};
+
+        let mut bbox = crate::ass_outline::Rect::default();
+        bbox.reset();
+        let mut segments = vec![];
+        for i in (0..points.len()).step_by(2) {
+            let p0 = Vector {
+                x: (points[i + 0] * 64.0) as i32,
+                y: (points[i + 1] * 64.0) as i32,
+            };
+            let p1 = if i + 3 < points.len() {
+                Vector {
+                    x: (points[i + 2] * 64.0) as i32,
+                    y: (points[i + 3] * 64.0) as i32,
+                }
+            } else {
+                Vector {
+                    x: (points[0] * 64.0) as i32,
+                    y: (points[1] * 64.0) as i32,
+                }
+            };
+            bbox.update_point(p0);
+            bbox.update_point(p1);
+            segments.push(Segment::LineSegment(p0, p1));
+        }
+
         let x0 = bbox.x_min as f32 / 64.0;
         let x1 = bbox.x_max as f32 / 64.0;
         let y0 = bbox.y_min as f32 / 64.0;
@@ -351,7 +380,7 @@ impl OpenGlCanvas {
         rasterizer.reset(width as usize, height as usize);
 
         for segment in segments {
-            use crate::ass_outline::{Segment, Vector};
+            println!("{:?}", segment);
             use ab_glyph_rasterizer::Point;
             let cnv = |p: Vector| -> Point {
                 let x = p.x as f32 / 64.0;
@@ -371,7 +400,7 @@ impl OpenGlCanvas {
             }
         }
 
-        img_buf.clear();
+        //img_buf.clear();
         img_buf.resize(width as usize * height as usize, 0);
         rasterizer.for_each_pixel_2d(|x, y, v| {
             let i = x as usize + (y as usize * width as usize);

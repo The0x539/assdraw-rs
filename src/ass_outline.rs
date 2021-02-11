@@ -153,6 +153,11 @@ impl Rect {
         self.x_max = self.x_max.max(x_max);
         self.y_max = self.y_max.max(y_max);
     }
+
+    #[inline]
+    pub fn update_point(&mut self, p: Vector) {
+        self.update(p.x, p.y, p.x, p.y);
+    }
 }
 
 #[derive(Debug, Default, Copy, Clone)]
