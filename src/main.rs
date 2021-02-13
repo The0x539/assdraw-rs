@@ -6,6 +6,7 @@ mod ass_outline;
 mod canvas;
 mod drawing;
 mod gl;
+mod vk;
 
 pub use crate::gl::abstraction;
 

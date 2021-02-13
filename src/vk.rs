@@ -36,6 +36,7 @@ impl VkCanvas {
     pub fn get_dimensions(&self) -> crate::gl::Dimensions {
         todo!()
     }
+    pub fn pop_point(&self) {}
     pub fn render(&self) {}
 }
 
@@ -53,9 +54,9 @@ impl VkCanvasInner {
     fn new(canvas: &nwg::ExternCanvas) -> Self {
         use std::ptr;
         use winapi::shared::minwindef::HINSTANCE;
-        use winapi::um::libloaderapi::GetModuleHandleW;
 
         let extensions = InstanceExtensions {
+            khr_surface: true,
             khr_win32_surface: true,
             ..InstanceExtensions::none()
         };
@@ -80,11 +81,7 @@ impl VkCanvasInner {
         }
         let (device, queue) = device_and_queue.expect("no device");
 
-        let hinstance: HINSTANCE = unsafe {
-            let inst = GetModuleHandleW(ptr::null());
-            assert!(!inst.is_null(), "GetModuleHandleW failed");
-            inst
-        };
+        let hinstance: HINSTANCE = ptr::null_mut();
         let hwnd = canvas.handle.hwnd().expect("Canvas was uninitialized");
         let surface = unsafe { Surface::from_hwnd(instance.clone(), hinstance, hwnd, ()).unwrap() };
 
@@ -111,7 +108,7 @@ impl VkCanvasInner {
                 usage,
                 SharingMode::Exclusive,
                 transform, // SurfaceTransform::Inherit,
-                CompositeAlpha::Inherit,
+                CompositeAlpha::Opaque,
                 PresentMode::Relaxed,
                 FullscreenExclusive::Default,
                 true,

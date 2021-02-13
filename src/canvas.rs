@@ -5,7 +5,7 @@ use native_windows_gui as nwg;
 
 use nwd::NwgUi;
 
-use crate::gl::OpenGlCanvas;
+//use crate::gl::OpenGlCanvas;
 
 #[derive(Default, NwgUi)]
 pub struct Canvas {
@@ -28,7 +28,7 @@ pub struct Canvas {
         OnMouseWheel: [Canvas::zoom(SELF, EVT_DATA)],
     )]
     #[nwg_layout_item(layout: grid, col: 0, row: 0, col_span: 3, row_span: 8)]
-    pub canvas: OpenGlCanvas,
+    pub canvas: crate::vk::VkCanvas,
 
     #[nwg_resource]
     pub color_dialog: nwg::ColorDialog,
