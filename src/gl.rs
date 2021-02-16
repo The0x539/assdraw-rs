@@ -391,7 +391,6 @@ impl OpenGlCanvas {
         rasterizer.reset(width as usize, height as usize);
 
         for segment in segments {
-            println!("{:?}", segment);
             use ab_glyph_rasterizer::Point;
             let cnv = |p: Vector| -> Point {
                 let x = p.x as f32 / 64.0;
