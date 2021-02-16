@@ -10,5 +10,5 @@ out vec4 outColor;
  
 void main() {
 	float a = texture(u_Texture, v_Position).r;
-	outColor = vec4(u_Color, a);
+	outColor = vec4(u_Color / 255.0, a);
 }
