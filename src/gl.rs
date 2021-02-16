@@ -353,10 +353,13 @@ impl OpenGlCanvas {
         }
     }
 
-    pub fn add_point(&self, x: f32, y: f32) {
-        let mut points = self.drawing_points_mut();
-        points.push(Point { x, y });
-        drop(points);
+    pub fn add_point(&self, point: Point) {
+        self.drawing_points_mut().push(point);
+        self.update_drawing();
+    }
+
+    pub fn update_point(&self, i: usize, point: Point) {
+        self.drawing_points_mut()[i] = point;
         self.update_drawing();
     }
 

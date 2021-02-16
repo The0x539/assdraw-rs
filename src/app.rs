@@ -40,6 +40,7 @@ pub struct AppInner {
 
     left_dragging: Cell<bool>,
     right_dragging: Cell<bool>,
+    dragged_point: Cell<Option<usize>>,
     pre_drag_pos: Cell<Point>,
     drag_start_pos: Cell<(i32, i32)>,
 }
@@ -57,14 +58,18 @@ impl AppInner {
         self.left_dragging.get() || self.right_dragging.get()
     }
 
-    fn add_point_at_cursor(&self) {
+    fn get_point_at_cursor(&self) -> Point {
         let (x, y) = self.cursor_pos();
         let dims = self.get_canvas().get_dimensions();
-        let (scene_x, scene_y) = (
-            dims.scene_pos.x + x as f32 / dims.scale,
-            dims.scene_pos.y + y as f32 / dims.scale,
-        );
-        self.get_canvas().add_point(scene_x, scene_y);
+        Point {
+            x: dims.scene_pos.x + x as f32 / dims.scale,
+            y: dims.scene_pos.y + y as f32 / dims.scale,
+        }
+    }
+
+    fn add_point_at_cursor(&self) {
+        let point = self.get_point_at_cursor();
+        self.get_canvas().add_point(point);
     }
 
     fn clear_drawing(&self) {
@@ -181,8 +186,10 @@ impl AppInner {
             })
         }
         if self.left_dragging.get() {
-            self.get_canvas().pop_point();
-            self.add_point_at_cursor();
+            if let Some(i) = self.dragged_point.get() {
+                self.get_canvas()
+                    .update_point(i, self.get_point_at_cursor());
+            }
         }
     }
     fn mouse_press(&self, event: nwg::MousePressEvent) {
@@ -195,7 +202,24 @@ impl AppInner {
                 self.right_dragging.set(false);
             }
             nwg::MousePressEvent::MousePressLeftDown => {
-                self.add_point_at_cursor();
+                let mut drag_idx = None;
+                let cursor_pos = self.get_point_at_cursor();
+                let canvas = self.get_canvas();
+                let scale = canvas.get_dimensions().scale;
+                for (i, point) in canvas.drawing_points().iter().enumerate() {
+                    let dx = cursor_pos.x - point.x;
+                    let dy = cursor_pos.y - point.y;
+                    if f32::max(dx.abs(), dy.abs()) <= 5.0 / scale {
+                        drag_idx = Some(i);
+                        break;
+                    }
+                }
+                if drag_idx.is_none() {
+                    self.add_point_at_cursor();
+                    drag_idx = Some(canvas.drawing_points().len() - 1);
+                }
+                self.dragged_point.set(drag_idx);
+
                 self.left_dragging.set(true);
             }
             nwg::MousePressEvent::MousePressLeftUp => {
@@ -209,7 +233,10 @@ impl AppInner {
                 self.pre_drag_pos
                     .set(self.get_canvas().get_dimensions().scene_pos);
             }
-            (true, false) => nwg::GlobalCursor::release(),
+            (true, false) => {
+                nwg::GlobalCursor::release();
+                self.dragged_point.take();
+            }
             _ => (),
         }
     }
@@ -285,6 +312,7 @@ impl nwg::NativeUi<App> for AppBuilder {
 
             left_dragging: Default::default(),
             right_dragging: Default::default(),
+            dragged_point: Default::default(),
             pre_drag_pos: Default::default(),
             drag_start_pos: Default::default(),
         });
