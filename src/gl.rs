@@ -31,9 +31,28 @@ use gl::types::{GLfloat, GLint};
 
 #[derive(Default, Copy, Clone, Debug)]
 pub struct Dimensions {
-    pub screen_dims: [GLfloat; 2],
-    pub scene_pos: [GLfloat; 2],
+    pub screen_dims: Point,
+    pub scene_pos: Point,
     pub scale: GLfloat,
+}
+
+#[repr(C)]
+#[derive(Debug, Default, Copy, Clone)]
+pub struct Point {
+    pub x: f32,
+    pub y: f32,
+}
+
+impl From<Point> for [f32; 2] {
+    fn from(value: Point) -> Self {
+        [value.x, value.y]
+    }
+}
+
+impl From<[f32; 2]> for Point {
+    fn from([x, y]: [f32; 2]) -> Self {
+        Self { x, y }
+    }
 }
 
 pub struct OpenGlCanvas {
@@ -57,13 +76,13 @@ pub struct OpenGlCanvas {
     drawing: RefCell<DrawingData>,
 
     dimensions: Cell<Dimensions>,
-    drawing_pos: Cell<[f32; 2]>,
+    drawing_pos: Cell<Point>,
 }
 
 struct DrawingData {
     // TODO: alpha-only data. should be faster
     pixels: Vec<u32>,
-    points: Vec<f32>,
+    points: Vec<Point>,
     rasterizer: Rasterizer,
 }
 
@@ -174,8 +193,8 @@ impl OpenGlCanvas {
         };
 
         let dimensions = Dimensions {
-            screen_dims: [100.0, 100.0],
-            scene_pos: [0.0, 0.0],
+            screen_dims: [100.0, 100.0].into(),
+            scene_pos: [0.0, 0.0].into(),
             scale: 1.0,
         };
 
@@ -200,15 +219,15 @@ impl OpenGlCanvas {
             drawing,
 
             dimensions: Cell::new(dimensions),
-            drawing_pos: Cell::new([0.0, 0.0]),
+            drawing_pos: Cell::new(Point::default()),
         }
     }
 
-    pub fn drawing_points(&self) -> Ref<Vec<f32>> {
+    pub fn drawing_points(&self) -> Ref<Vec<Point>> {
         Ref::map(self.drawing.borrow(), |x| &x.points)
     }
 
-    fn drawing_points_mut(&self) -> RefMut<Vec<f32>> {
+    fn drawing_points_mut(&self) -> RefMut<Vec<Point>> {
         RefMut::map(self.drawing.borrow_mut(), |x| &mut x.points)
     }
 
@@ -230,7 +249,7 @@ impl OpenGlCanvas {
                 .unwrap()
                 .unwrap();
             let pos = self.drawing_pos.get();
-            gl::Uniform2f(*pos_loc, pos[0], pos[1]);
+            gl::Uniform2f(*pos_loc, pos.x, pos.y);
             self.shape_tex.bind(TextureTarget::Rectangle);
             gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
             gl::Uniform2f(*pos_loc, 0.0, 0.0);
@@ -238,8 +257,8 @@ impl OpenGlCanvas {
             self.points_vao.bind();
             gl::UseProgram(*self.draw_prgm);
             self.update_dimension_uniforms();
-            gl::DrawArrays(gl::POINTS, 0, self.drawing_points().len() as i32 / 2);
-            gl::DrawArrays(gl::LINE_STRIP, 0, self.drawing_points().len() as i32 / 2);
+            gl::DrawArrays(gl::POINTS, 0, self.drawing_points().len() as i32);
+            gl::DrawArrays(gl::LINE_STRIP, 0, self.drawing_points().len() as i32);
 
             check_errors().unwrap();
 
@@ -249,7 +268,7 @@ impl OpenGlCanvas {
 
     pub fn resize(&self) {
         let (w, h) = self.canvas.physical_size();
-        self.update_dimensions(|dims| dims.screen_dims = [w as _, h as _]);
+        self.update_dimensions(|dims| dims.screen_dims = [w as f32, h as f32].into());
         unsafe {
             gl::Viewport(0, 0, w as _, h as _);
         }
@@ -280,8 +299,8 @@ impl OpenGlCanvas {
         let scale_loc = uniform(cstr!("scale"));
 
         unsafe {
-            gl::Uniform2f(*screen_dims_loc, dims.screen_dims[0], dims.screen_dims[1]);
-            gl::Uniform2f(*scene_pos_loc, dims.scene_pos[0], dims.scene_pos[1]);
+            gl::Uniform2f(*screen_dims_loc, dims.screen_dims.x, dims.screen_dims.y);
+            gl::Uniform2f(*scene_pos_loc, dims.scene_pos.x, dims.scene_pos.y);
             gl::Uniform1f(*scale_loc, dims.scale);
         }
     }
@@ -336,19 +355,17 @@ impl OpenGlCanvas {
 
     pub fn add_point(&self, x: f32, y: f32) {
         let mut points = self.drawing_points_mut();
-        points.push(x);
-        points.push(y);
+        points.push(Point { x, y });
         drop(points);
         self.update_drawing();
     }
 
-    pub fn pop_point(&self) -> Option<(f32, f32)> {
+    pub fn pop_point(&self) -> Option<Point> {
         let mut points = self.drawing_points_mut();
-        let x = points.pop()?;
-        let y = points.pop().unwrap();
+        let p = points.pop()?;
         drop(points);
         self.update_drawing();
-        Some((x, y))
+        Some(p)
     }
 
     pub fn clear_drawing(&self) {
@@ -392,7 +409,7 @@ impl OpenGlCanvas {
         }
 
         let points = &drawing.points;
-        if points.len() < 6 {
+        if points.len() < 3 {
             return;
         }
 
@@ -411,26 +428,23 @@ impl OpenGlCanvas {
         let mut bbox = crate::ass_outline::Rect::default();
         bbox.reset();
         let mut segments = vec![];
-        for i in (0..points.len()).step_by(2) {
-            let p0 = Vector {
-                x: (points[i + 0] * 64.0) as i32,
-                y: (points[i + 1] * 64.0) as i32,
-            };
-            let p1 = if i + 3 < points.len() {
-                Vector {
-                    x: (points[i + 2] * 64.0) as i32,
-                    y: (points[i + 3] * 64.0) as i32,
-                }
-            } else {
-                Vector {
-                    x: (points[0] * 64.0) as i32,
-                    y: (points[1] * 64.0) as i32,
-                }
-            };
-            bbox.update_point(p0);
-            bbox.update_point(p1);
-            segments.push(Segment::LineSegment(p0, p1));
+        fn point_to_vector(p: Point) -> Vector {
+            Vector {
+                x: (p.x * 64.0) as i32,
+                y: (p.y * 64.0) as i32,
+            }
         }
+        for ps in points.windows(2) {
+            let v0 = point_to_vector(ps[0]);
+            let v1 = point_to_vector(ps[1]);
+            bbox.update_point(v0);
+            bbox.update_point(v1);
+            segments.push(Segment::LineSegment(v0, v1));
+        }
+        segments.push(Segment::LineSegment(
+            point_to_vector(points[points.len() - 1]),
+            point_to_vector(points[0]),
+        ));
 
         let x0 = bbox.x_min as f32 / 64.0;
         let x1 = bbox.x_max as f32 / 64.0;
@@ -470,7 +484,7 @@ impl OpenGlCanvas {
             img_buf[i] = u32::from_ne_bytes([px, 127, 127, 127]);
         });
 
-        self.drawing_pos.set([x0, y0]);
+        self.drawing_pos.set([x0, y0].into());
 
         unsafe {
             /*

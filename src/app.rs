@@ -8,6 +8,7 @@ use native_windows_gui as nwg;
 use nwg::Event;
 
 type Canvas = crate::gl::OpenGlCanvas;
+use crate::gl::Point;
 
 fn change_scale(mut scale: f32, factor: i32) -> f32 {
     assert!(scale > 0.0);
@@ -39,7 +40,7 @@ pub struct AppInner {
 
     left_dragging: Cell<bool>,
     right_dragging: Cell<bool>,
-    pre_drag_pos: Cell<[f32; 2]>,
+    pre_drag_pos: Cell<Point>,
     drag_start_pos: Cell<(i32, i32)>,
 }
 
@@ -60,8 +61,8 @@ impl AppInner {
         let (x, y) = self.cursor_pos();
         let dims = self.get_canvas().get_dimensions();
         let (scene_x, scene_y) = (
-            dims.scene_pos[0] + x as f32 / dims.scale,
-            dims.scene_pos[1] + y as f32 / dims.scale,
+            dims.scene_pos.x + x as f32 / dims.scale,
+            dims.scene_pos.y + y as f32 / dims.scale,
         );
         self.get_canvas().add_point(scene_x, scene_y);
     }
@@ -72,14 +73,14 @@ impl AppInner {
 
     fn copy_drawing(&self) -> std::fmt::Result {
         let points = self.get_canvas().drawing_points();
-        if points.len() < 2 {
+        if points.len() == 0 {
             return Ok(());
         }
-        let mut data = format!("m {} {}", points[0], points[1]);
+        let mut data = format!("m {} {}", points[0].x, points[0].y);
         if points.len() > 2 {
             write!(data, " l")?;
-            for xy in points[2..].chunks_exact(2) {
-                write!(data, " {} {}", xy[0], xy[1])?;
+            for xy in &points[1..] {
+                write!(data, " {} {}", xy.x, xy.y)?;
             }
         }
         clipboard_win::set_clipboard_string(&data).unwrap_or((/* ignore */));
@@ -141,16 +142,16 @@ impl AppInner {
             let (mouse_x, mouse_y) = self.cursor_pos();
             let [mouse_x, mouse_y] = [mouse_x as f32, mouse_y as f32];
             let [mouse_scene_x, mouse_scene_y] = [
-                dims.scene_pos[0] + mouse_x / dims.scale,
-                dims.scene_pos[1] + mouse_y / dims.scale,
+                dims.scene_pos.x + mouse_x / dims.scale,
+                dims.scene_pos.y + mouse_y / dims.scale,
             ];
 
             let new_scale = change_scale(dims.scale, factor);
 
-            let new_scene_pos = [
-                mouse_scene_x - (mouse_x / new_scale),
-                mouse_scene_y - (mouse_y / new_scale),
-            ];
+            let new_scene_pos = Point {
+                x: mouse_scene_x - (mouse_x / new_scale),
+                y: mouse_scene_y - (mouse_y / new_scale),
+            };
 
             if self.right_dragging.get() {
                 self.pre_drag_pos.set(new_scene_pos);
@@ -166,7 +167,8 @@ impl AppInner {
             return;
         }
 
-        let [x0, y0] = self.pre_drag_pos.get();
+        let xy0 = self.pre_drag_pos.get();
+        let (x0, y0) = (xy0.x, xy0.y);
         let (dx0, dy0) = self.drag_start_pos.get();
         let (dx1, dy1) = self.cursor_pos();
         let (dx, dy) = (dx1 - dx0, dy1 - dy0);
@@ -175,7 +177,7 @@ impl AppInner {
             self.get_canvas().update_dimensions(|dims| {
                 let x = x0 - (dx as f32) / dims.scale;
                 let y = y0 - (dy as f32) / dims.scale;
-                dims.scene_pos = [x, y];
+                dims.scene_pos = [x, y].into();
             })
         }
         if self.left_dragging.get() {
