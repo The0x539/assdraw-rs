@@ -6,7 +6,7 @@ use once_cell::unsync::OnceCell;
 use native_windows_gui as nwg;
 use nwg::Event;
 
-type Canvas = crate::vk::VkCanvas;
+type Canvas = crate::gl::OpenGlCanvas;
 
 fn change_scale(mut scale: f32, factor: i32) -> f32 {
     assert!(scale > 0.0);
@@ -29,7 +29,6 @@ pub struct AppBuilder;
 
 pub struct AppInner {
     window: nwg::Window,
-    #[allow(dead_code)]
     grid: nwg::GridLayout,
     pub canvas: OnceCell<Canvas>,
     canvas_handler: OnceCell<nwg::EventHandler>,

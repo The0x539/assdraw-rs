@@ -32,6 +32,7 @@ pub struct VkCanvas {
     canvas: nwg::ExternCanvas,
 }
 
+#[allow(dead_code)]
 impl VkCanvas {
     pub fn new<W: Into<nwg::ControlHandle>>(parent: W) -> Self {
         use std::ptr;
