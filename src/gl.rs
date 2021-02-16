@@ -88,27 +88,13 @@ fn make_extern_canvas<W: Into<nwg::ControlHandle>>(parent: W) -> nwg::ExternCanv
 
 impl OpenGlCanvas {
     pub fn new<W: Into<nwg::ControlHandle>>(parent: W) -> Self {
+        use std::ffi::c_void;
+        const NULL: *const c_void = std::ptr::null();
+
         let canvas = make_extern_canvas(parent);
 
-        let ctx;
-        let img_prgm;
-        let draw_prgm;
-        let drawing;
-        let points_vb;
-        let points_vao;
-        let img_vb;
-        let img_vao;
-        let img_tex;
-        let shape_vb;
-        let shape_vao;
-        let shape_tex;
-        let dimensions;
-
-        #[allow(unreachable_code)]
-        unsafe {
-            use std::{ffi::c_void, mem, ptr};
-
-            ctx = ContextBuilder::new()
+        let ctx = unsafe {
+            let ctx = ContextBuilder::new()
                 .with_gl(GlRequest::Specific(Api::OpenGl, (3, 3)))
                 .with_gl_profile(GlProfile::Core)
                 .build_raw_context(canvas.handle.hwnd().unwrap() as *mut c_void)
@@ -117,62 +103,76 @@ impl OpenGlCanvas {
                 .expect("Failed to set opengl context as current");
 
             gl::load_with(|s| ctx.get_proc_address(s) as *const c_void);
-
             gl::ClearColor(0.0, 0.0, 0.0, 1.0);
+            ctx
+        };
 
+        let (img_prgm, draw_prgm) = {
             let vs = Shader::build(ShaderType::Vertex, include_str!("vs.glsl"));
             let img_fs = Shader::build(ShaderType::Fragment, include_str!("fs.glsl"));
             let draw_fs = Shader::build(ShaderType::Fragment, include_str!("blue.glsl"));
 
-            img_prgm = Program::build(&vs, &img_fs);
-            draw_prgm = Program::build(&vs, &draw_fs);
+            (Program::build(&vs, &img_fs), Program::build(&vs, &draw_fs))
+        };
 
-            drawing = Default::default();
+        let drawing = RefCell::new(DrawingData::default());
 
-            points_vb = Buffer::new();
-            points_vb.bind(BufferTarget::Array);
+        const VEC2_STRIDE: i32 = (std::mem::size_of::<f32>() * 2) as i32;
 
-            points_vao = VertexArray::new();
-            points_vao.bind();
+        let (points_vb, points_vao) = unsafe {
+            let vb = Buffer::new();
+            vb.bind(BufferTarget::Array);
+
+            let vao = VertexArray::new();
+            vao.bind();
             gl::EnableVertexAttribArray(0);
-            let stride = mem::size_of::<f32>() * 2;
-            gl::VertexAttribPointer(0, 2, gl::FLOAT, 0, stride as _, ptr::null());
+            gl::VertexAttribPointer(0, 2, gl::FLOAT, 0, VEC2_STRIDE, NULL);
 
-            img_vb = Buffer::new();
-            img_vb.bind(BufferTarget::Array);
+            (vb, vao)
+        };
+
+        let (img_vb, img_vao, img_tex) = unsafe {
+            let vb = Buffer::new();
+            vb.bind(BufferTarget::Array);
             Buffer::buffer_data(BufferTarget::Array, &[0_f32; 8], Usage::StaticDraw).unwrap();
 
-            img_vao = VertexArray::new();
-            img_vao.bind();
+            let vao = VertexArray::new();
+            vao.bind();
             gl::EnableVertexAttribArray(0);
-            gl::VertexAttribPointer(0, 2, gl::FLOAT, 0, stride as _, ptr::null());
+            gl::VertexAttribPointer(0, 2, gl::FLOAT, 0, VEC2_STRIDE, NULL);
 
-            img_tex = Texture::new();
-            img_tex.bind(TextureTarget::Rectangle);
+            let tex = Texture::new();
+            tex.bind(TextureTarget::Rectangle);
 
-            shape_vb = Buffer::new();
-            shape_vb.bind(BufferTarget::Array);
+            (vb, vao, tex)
+        };
+
+        let (shape_vb, shape_vao, shape_tex) = unsafe {
+            let vb = Buffer::new();
+            vb.bind(BufferTarget::Array);
             Buffer::buffer_data(BufferTarget::Array, &[0_f32; 8], Usage::StaticDraw).unwrap();
 
-            shape_vao = VertexArray::new();
-            shape_vao.bind();
+            let vao = VertexArray::new();
+            vao.bind();
             gl::EnableVertexAttribArray(0);
-            gl::VertexAttribPointer(0, 2, gl::FLOAT, 0, stride as _, ptr::null());
+            gl::VertexAttribPointer(0, 2, gl::FLOAT, 0, VEC2_STRIDE, NULL);
 
-            shape_tex = Texture::new();
-            shape_tex.bind(TextureTarget::Rectangle);
+            let tex = Texture::new();
+            tex.bind(TextureTarget::Rectangle);
 
             gl::PointSize(5.0);
             gl::Enable(gl::BLEND);
             gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
             check_errors().unwrap();
 
-            dimensions = Dimensions {
-                screen_dims: [100.0, 100.0],
-                scene_pos: [0.0, 0.0],
-                scale: 1.0,
-            };
-        }
+            (vb, vao, tex)
+        };
+
+        let dimensions = Dimensions {
+            screen_dims: [100.0, 100.0],
+            scene_pos: [0.0, 0.0],
+            scale: 1.0,
+        };
 
         Self {
             ctx,
