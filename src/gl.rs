@@ -40,7 +40,7 @@ pub struct Dimensions {
 #[derive(Default)]
 pub struct OpenGlCanvas {
     ctx: OnceCell<Ctx>,
-    pub(crate) canvas: nwg::ExternCanvas,
+    canvas: nwg::ExternCanvas,
 
     img_prgm: OnceCell<Program>,
     draw_prgm: OnceCell<Program>,
@@ -80,7 +80,18 @@ impl Default for DrawingData {
 }
 
 impl OpenGlCanvas {
-    pub fn create_context(&self) {
+    pub fn new<W: Into<nwg::ControlHandle>>(parent: W) -> Self {
+        let mut obj = Self::default();
+        nwg::ExternCanvas::builder()
+            .parent(Some(parent.into()))
+            .build(&mut obj.canvas)
+            .expect("Failed to build nwg::ExternCanvas");
+
+        obj.create_context();
+        obj
+    }
+
+    fn create_context(&self) {
         use std::{ffi::c_void, mem, ptr};
 
         unsafe {

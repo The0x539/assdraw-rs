@@ -68,16 +68,11 @@ impl AppInner {
         self.window.set_visible(true);
         self.window.set_focus();
 
-        let mut canvas = Canvas::default();
-        nwg::ExternCanvas::builder()
-            .parent(Some(&self.window))
-            .build(&mut canvas.canvas)
-            .unwrap();
+        let canvas = Canvas::new(&self.window);
 
         self.grid
             .add_child_item(nwg::GridLayoutItem::new(&canvas, 0, 0, 3, 8));
 
-        canvas.create_context();
         canvas.resize();
 
         let ui = Rc::downgrade(&self);
