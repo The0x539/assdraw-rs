@@ -40,7 +40,7 @@ pub struct Dimensions {
 #[derive(Default)]
 pub struct OpenGlCanvas {
     ctx: OnceCell<Ctx>,
-    canvas: nwg::ExternCanvas,
+    pub(crate) canvas: nwg::ExternCanvas,
 
     img_prgm: OnceCell<Program>,
     draw_prgm: OnceCell<Program>,
