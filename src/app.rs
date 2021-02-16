@@ -47,7 +47,7 @@ impl AppInner {
     }
 
     fn cursor_pos(&self) -> (i32, i32) {
-        nwg::GlobalCursor::local_position(self.get_canvas(), None)
+        nwg::GlobalCursor::local_position(self.get_canvas().handle(), None)
     }
 
     fn is_dragging(&self) -> bool {
@@ -71,7 +71,7 @@ impl AppInner {
         let canvas = Canvas::new(&self.window);
 
         self.grid
-            .add_child_item(nwg::GridLayoutItem::new(&canvas, 0, 0, 3, 8));
+            .add_child_item(nwg::GridLayoutItem::new(canvas.handle(), 0, 0, 3, 8));
 
         canvas.resize();
 
@@ -79,7 +79,7 @@ impl AppInner {
 
         let f = move |evt, evt_data, handle| {
             let ui = ui.upgrade().unwrap();
-            if handle != ui.canvas.get().unwrap().handle {
+            if &handle != ui.canvas.get().unwrap().handle() {
                 return;
             }
             match evt {
@@ -180,7 +180,7 @@ impl AppInner {
         }
         match (was_dragging, self.is_dragging()) {
             (false, true) => {
-                nwg::GlobalCursor::set_capture(&self.get_canvas().handle);
+                nwg::GlobalCursor::set_capture(self.get_canvas().handle());
                 self.drag_start_pos.set(self.cursor_pos());
                 self.pre_drag_pos
                     .set(self.get_canvas().get_dimensions().scene_pos);
@@ -255,20 +255,13 @@ impl nwg::NativeUi<App> for AppBuilder {
         });
 
         let ui = Rc::downgrade(&inner);
-        let handle_fn = move |evt, evt_data, handle| {
+        let handle_fn = move |evt, _evt_data, handle| {
             let ui = ui.upgrade().unwrap();
             if handle == ui.window.handle {
                 match evt {
                     Event::OnInit => AppInner::show(ui),
                     Event::OnResize | Event::OnWindowMaximize => ui.resize_canvas(),
                     Event::OnWindowClose => ui.exit(),
-                    _ => (),
-                }
-            } else if Some(handle) == ui.canvas.get().map(|c| c.handle) {
-                match evt {
-                    Event::OnMouseMove => ui.mouse_move(),
-                    Event::OnMouseWheel => ui.zoom(evt_data),
-                    Event::OnMousePress(mouse_evt) => ui.mouse_press(mouse_evt),
                     _ => (),
                 }
             } else if handle == ui.paste_image_btn {

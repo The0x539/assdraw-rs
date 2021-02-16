@@ -87,6 +87,10 @@ fn make_extern_canvas<W: Into<nwg::ControlHandle>>(parent: W) -> nwg::ExternCanv
 }
 
 impl OpenGlCanvas {
+    pub fn handle(&self) -> &nwg::ControlHandle {
+        &self.canvas.handle
+    }
+
     pub fn new<W: Into<nwg::ControlHandle>>(parent: W) -> Self {
         use std::ffi::c_void;
         const NULL: *const c_void = std::ptr::null();
@@ -476,5 +480,3 @@ impl OpenGlCanvas {
         }
     }
 }
-
-nwg::subclass_control!(OpenGlCanvas, ExternCanvas, canvas);
