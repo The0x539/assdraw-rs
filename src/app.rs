@@ -1,4 +1,5 @@
 use std::cell::Cell;
+use std::fmt::Write;
 use std::rc::Rc;
 
 use once_cell::unsync::OnceCell;
@@ -34,6 +35,7 @@ pub struct AppInner {
     canvas_handler: OnceCell<nwg::EventHandler>,
     paste_image_btn: nwg::Button,
     clear_drawing_btn: nwg::Button,
+    copy_drawing_btn: nwg::Button,
 
     left_dragging: Cell<bool>,
     right_dragging: Cell<bool>,
@@ -66,6 +68,22 @@ impl AppInner {
 
     fn clear_drawing(&self) {
         self.get_canvas().clear_drawing();
+    }
+
+    fn copy_drawing(&self) -> std::fmt::Result {
+        let points = self.get_canvas().drawing_points();
+        if points.len() < 2 {
+            return Ok(());
+        }
+        let mut data = format!("m {} {}", points[0], points[1]);
+        if points.len() > 2 {
+            write!(data, " l")?;
+            for xy in points[2..].chunks_exact(2) {
+                write!(data, " {} {}", xy[0], xy[1])?;
+            }
+        }
+        clipboard_win::set_clipboard_string(&data).unwrap_or((/* ignore */));
+        Ok(())
     }
 
     fn show(self: Rc<Self>) {
@@ -230,17 +248,18 @@ impl nwg::NativeUi<App> for AppBuilder {
             .build(&mut *canvas)?;
         */
 
-        let mut paste_image_btn = Default::default();
-        nwg::Button::builder()
-            .parent(&window)
-            .text("bg")
-            .build(&mut paste_image_btn)?;
+        let make_button = |text| {
+            let mut btn = Default::default();
+            nwg::Button::builder()
+                .parent(&window)
+                .text(text)
+                .build(&mut btn)?;
+            Ok(btn)
+        };
 
-        let mut clear_drawing_btn = Default::default();
-        nwg::Button::builder()
-            .parent(&window)
-            .text("clear")
-            .build(&mut clear_drawing_btn)?;
+        let paste_image_btn = make_button("bg")?;
+        let clear_drawing_btn = make_button("clear")?;
+        let copy_drawing_btn = make_button("copy")?;
 
         let mut grid = Default::default();
         nwg::GridLayout::builder()
@@ -250,6 +269,7 @@ impl nwg::NativeUi<App> for AppBuilder {
             //.child_item(nwg::GridLayoutItem::new(&canvas, 0, 0, 3, 8))
             .child_item(nwg::GridLayoutItem::new(&paste_image_btn, 3, 0, 1, 1))
             .child_item(nwg::GridLayoutItem::new(&clear_drawing_btn, 3, 1, 1, 1))
+            .child_item(nwg::GridLayoutItem::new(&copy_drawing_btn, 3, 2, 1, 1))
             .build(&mut grid)?;
 
         let inner = Rc::new(AppInner {
@@ -259,6 +279,7 @@ impl nwg::NativeUi<App> for AppBuilder {
             canvas_handler: OnceCell::new(),
             paste_image_btn,
             clear_drawing_btn,
+            copy_drawing_btn,
 
             left_dragging: Default::default(),
             right_dragging: Default::default(),
@@ -281,6 +302,8 @@ impl nwg::NativeUi<App> for AppBuilder {
                     ui.paste_image();
                 } else if handle == ui.clear_drawing_btn {
                     ui.clear_drawing();
+                } else if handle == ui.copy_drawing_btn {
+                    ui.copy_drawing().unwrap();
                 }
             }
         };

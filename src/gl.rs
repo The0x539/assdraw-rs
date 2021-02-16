@@ -204,7 +204,7 @@ impl OpenGlCanvas {
         }
     }
 
-    fn drawing_points(&self) -> Ref<Vec<f32>> {
+    pub fn drawing_points(&self) -> Ref<Vec<f32>> {
         Ref::map(self.drawing.borrow(), |x| &x.points)
     }
 
