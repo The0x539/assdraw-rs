@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use native_windows_gui as nwg;
-use once_cell::unsync::OnceCell;
 
 use vulkano::{
     device::{Device, DeviceExtensions, Features, Queue},
@@ -11,49 +10,34 @@ use vulkano::{
     sync::SharingMode,
 };
 
-#[derive(Default)]
-pub struct VkCanvas {
-    inner: OnceCell<VkCanvasInner>,
-    // drop order is important
-    canvas: nwg::ExternCanvas,
-}
-
-nwg::subclass_control!(VkCanvas, ExternCanvas, canvas);
-
-impl VkCanvas {
-    pub fn create_context(&self) {
-        let inner = VkCanvasInner::new(&self.canvas);
-        self.inner
-            .set(inner)
-            .ok()
-            .expect("Context was already created");
-    }
-
-    pub fn resize(&self) {}
-    pub fn set_image<T>(&self, _: T) {}
-    pub fn update_dimensions<T: FnOnce(&mut crate::gl::Dimensions)>(&self, _: T) {}
-    pub fn add_point<T, U>(&self, _: T, _: U) {}
-    pub fn get_dimensions(&self) -> crate::gl::Dimensions {
-        todo!()
-    }
-    pub fn pop_point(&self) {}
-    pub fn render(&self) {}
+fn make_extern_canvas<W: Into<nwg::ControlHandle>>(parent: W) -> nwg::ExternCanvas {
+    let mut c = nwg::ExternCanvas::default();
+    nwg::ExternCanvas::builder()
+        .parent(Some(parent.into()))
+        .build(&mut c)
+        .expect("Failed to build nwg::ExternCanvas");
+    c
 }
 
 #[allow(dead_code)]
-struct VkCanvasInner {
+pub struct VkCanvas {
     instance: Arc<Instance>,
     device: Arc<Device>,
     queue: Arc<Queue>,
     surface: Arc<Surface<()>>,
     swapchain: Arc<Swapchain<()>>,
     buffers: Vec<Arc<SwapchainImage<()>>>,
+
+    // drop order is important
+    canvas: nwg::ExternCanvas,
 }
 
-impl VkCanvasInner {
-    fn new(canvas: &nwg::ExternCanvas) -> Self {
+impl VkCanvas {
+    pub fn new<W: Into<nwg::ControlHandle>>(parent: W) -> Self {
         use std::ptr;
         use winapi::shared::minwindef::HINSTANCE;
+
+        let canvas = make_extern_canvas(parent);
 
         let extensions = InstanceExtensions {
             khr_surface: true,
@@ -124,6 +108,22 @@ impl VkCanvasInner {
             surface,
             swapchain,
             buffers,
+
+            canvas,
         }
     }
+
+    pub fn handle(&self) -> &nwg::ControlHandle {
+        &self.canvas.handle
+    }
+
+    pub fn resize(&self) {}
+    pub fn set_image<T>(&self, _: T) {}
+    pub fn update_dimensions<T: FnOnce(&mut crate::gl::Dimensions)>(&self, _: T) {}
+    pub fn add_point<T, U>(&self, _: T, _: U) {}
+    pub fn get_dimensions(&self) -> crate::gl::Dimensions {
+        todo!()
+    }
+    pub fn pop_point(&self) {}
+    pub fn render(&self) {}
 }

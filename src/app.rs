@@ -6,7 +6,7 @@ use once_cell::unsync::OnceCell;
 use native_windows_gui as nwg;
 use nwg::Event;
 
-type Canvas = crate::gl::OpenGlCanvas;
+type Canvas = crate::vk::VkCanvas;
 
 fn change_scale(mut scale: f32, factor: i32) -> f32 {
     assert!(scale > 0.0);

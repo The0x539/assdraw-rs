@@ -86,6 +86,7 @@ fn make_extern_canvas<W: Into<nwg::ControlHandle>>(parent: W) -> nwg::ExternCanv
     c
 }
 
+#[allow(dead_code)]
 impl OpenGlCanvas {
     pub fn handle(&self) -> &nwg::ControlHandle {
         &self.canvas.handle
