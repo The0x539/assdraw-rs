@@ -9,7 +9,6 @@ use glutin::{
 use ab_glyph_rasterizer::Rasterizer;
 use cstr::cstr;
 use image::ImageDecoder;
-use once_cell::unsync::OnceCell;
 
 use std::cell::{Cell, Ref, RefCell, RefMut};
 use std::convert::TryInto;
@@ -38,22 +37,22 @@ pub struct Dimensions {
 }
 
 pub struct OpenGlCanvas {
-    ctx: OnceCell<Ctx>,
+    ctx: Ctx,
     canvas: nwg::ExternCanvas,
 
-    img_prgm: OnceCell<Program>,
-    draw_prgm: OnceCell<Program>,
+    img_prgm: Program,
+    draw_prgm: Program,
 
-    img_vb: OnceCell<Buffer>,
-    points_vb: OnceCell<Buffer>,
-    shape_vb: OnceCell<Buffer>,
+    img_vb: Buffer,
+    points_vb: Buffer,
+    shape_vb: Buffer,
 
-    img_vao: OnceCell<VertexArray>,
-    points_vao: OnceCell<VertexArray>,
-    shape_vao: OnceCell<VertexArray>,
+    img_vao: VertexArray,
+    points_vao: VertexArray,
+    shape_vao: VertexArray,
 
-    img_tex: OnceCell<Texture>,
-    shape_tex: OnceCell<Texture>,
+    img_tex: Texture,
+    shape_tex: Texture,
 
     drawing: RefCell<DrawingData>,
 
@@ -132,10 +131,6 @@ impl OpenGlCanvas {
 
             points_vb = Buffer::new();
             points_vb.bind(BufferTarget::Array);
-            {
-                //todo!("fix the below line or something");
-            }
-            // self.update_drawing();
 
             points_vao = VertexArray::new();
             points_vao.bind();
@@ -180,32 +175,28 @@ impl OpenGlCanvas {
         }
 
         Self {
-            ctx: ctx.into(),
+            ctx,
             canvas,
 
-            img_prgm: img_prgm.into(),
-            draw_prgm: draw_prgm.into(),
+            img_prgm,
+            draw_prgm,
 
-            img_vb: img_vb.into(),
-            points_vb: points_vb.into(),
-            shape_vb: shape_vb.into(),
+            img_vb,
+            points_vb,
+            shape_vb,
 
-            img_vao: img_vao.into(),
-            points_vao: points_vao.into(),
-            shape_vao: shape_vao.into(),
+            img_vao,
+            points_vao,
+            shape_vao,
 
-            img_tex: img_tex.into(),
-            shape_tex: shape_tex.into(),
+            img_tex,
+            shape_tex,
 
             drawing,
 
-            dimensions: dimensions.into(),
-            drawing_pos: Default::default(),
+            dimensions: Cell::new(dimensions),
+            drawing_pos: Cell::new([0.0, 0.0]),
         }
-    }
-
-    fn with_ctx<F: FnOnce(&Ctx) -> T, T>(&self, f: F) -> Option<T> {
-        self.ctx.get().map(f)
     }
 
     fn drawing_points(&self) -> Ref<Vec<f32>> {
@@ -217,40 +208,38 @@ impl OpenGlCanvas {
     }
 
     pub fn render(&self) {
-        self.with_ctx(|ctx| unsafe {
+        unsafe {
             gl::Clear(gl::COLOR_BUFFER_BIT);
 
-            self.img_vao.get().unwrap().bind();
-            gl::UseProgram(**self.img_prgm.get().unwrap());
+            self.img_vao.bind();
+            gl::UseProgram(*self.img_prgm);
             self.update_dimension_uniforms();
-            self.img_tex.get().unwrap().bind(TextureTarget::Rectangle);
+            self.img_tex.bind(TextureTarget::Rectangle);
             gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
 
-            self.shape_vao.get().unwrap().bind();
+            self.shape_vao.bind();
             self.update_dimension_uniforms();
             let pos_loc = self
                 .img_prgm
-                .get()
-                .unwrap()
                 .get_uniform_location(cstr!("drawing_pos"))
                 .unwrap()
                 .unwrap();
             let pos = self.drawing_pos.get();
             gl::Uniform2f(*pos_loc, pos[0], pos[1]);
-            self.shape_tex.get().unwrap().bind(TextureTarget::Rectangle);
+            self.shape_tex.bind(TextureTarget::Rectangle);
             gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
             gl::Uniform2f(*pos_loc, 0.0, 0.0);
 
-            self.points_vao.get().unwrap().bind();
-            gl::UseProgram(**self.draw_prgm.get().unwrap());
+            self.points_vao.bind();
+            gl::UseProgram(*self.draw_prgm);
             self.update_dimension_uniforms();
             gl::DrawArrays(gl::POINTS, 0, self.drawing_points().len() as i32 / 2);
             gl::DrawArrays(gl::LINE_STRIP, 0, self.drawing_points().len() as i32 / 2);
 
             check_errors().unwrap();
 
-            ctx.swap_buffers().unwrap();
-        });
+            self.ctx.swap_buffers().unwrap();
+        }
     }
 
     pub fn resize(&self) {
@@ -259,7 +248,7 @@ impl OpenGlCanvas {
         unsafe {
             gl::Viewport(0, 0, w as _, h as _);
         }
-        self.with_ctx(|ctx| ctx.resize(PhysicalSize::new(w, h)));
+        self.ctx.resize(PhysicalSize::new(w, h));
     }
 
     pub fn get_dimensions(&self) -> Dimensions {
@@ -278,7 +267,7 @@ impl OpenGlCanvas {
 
     fn update_dimension_uniforms(&self) {
         let dims = self.get_dimensions();
-        let prog = self.img_prgm.get().unwrap();
+        let prog = &self.img_prgm;
 
         let uniform = |name| prog.get_uniform_location(name).unwrap().unwrap();
         let screen_dims_loc = uniform(cstr!("screen_dims"));
@@ -322,7 +311,7 @@ impl OpenGlCanvas {
         ];
 
         unsafe {
-            self.img_tex.get().unwrap().bind(TextureTarget::Rectangle);
+            self.img_tex.bind(TextureTarget::Rectangle);
             gl::TexImage2D(
                 gl::TEXTURE_RECTANGLE,
                 0,
@@ -335,7 +324,7 @@ impl OpenGlCanvas {
                 buf2.as_ptr().cast(),
             );
 
-            self.img_vb.get().unwrap().bind(BufferTarget::Array);
+            self.img_vb.bind(BufferTarget::Array);
             Buffer::buffer_data(BufferTarget::Array, vertex_data, Usage::StaticDraw).unwrap();
         }
     }
@@ -361,7 +350,7 @@ impl OpenGlCanvas {
         let drawing = self.drawing.borrow_mut();
 
         unsafe {
-            self.points_vb.get().unwrap().bind(BufferTarget::Array);
+            self.points_vb.bind(BufferTarget::Array);
             Buffer::buffer_data(
                 BufferTarget::Array,
                 drawing.points.as_slice(),
@@ -469,7 +458,7 @@ impl OpenGlCanvas {
                 width, height,
             ];
 
-            self.shape_tex.get().unwrap().bind(TextureTarget::Rectangle);
+            self.shape_tex.bind(TextureTarget::Rectangle);
             gl::TexImage2D(
                 gl::TEXTURE_RECTANGLE,
                 0,
@@ -482,7 +471,7 @@ impl OpenGlCanvas {
                 img_buf.as_ptr().cast(),
             );
 
-            self.shape_vb.get().unwrap().bind(BufferTarget::Array);
+            self.shape_vb.bind(BufferTarget::Array);
             Buffer::buffer_data(BufferTarget::Array, vertex_data, Usage::StaticDraw).unwrap();
         }
     }
