@@ -37,7 +37,6 @@ pub struct Dimensions {
     pub scale: GLfloat,
 }
 
-#[derive(Default)]
 pub struct OpenGlCanvas {
     ctx: OnceCell<Ctx>,
     canvas: nwg::ExternCanvas,
@@ -79,26 +78,41 @@ impl Default for DrawingData {
     }
 }
 
+fn make_extern_canvas<W: Into<nwg::ControlHandle>>(parent: W) -> nwg::ExternCanvas {
+    let mut c = nwg::ExternCanvas::default();
+    nwg::ExternCanvas::builder()
+        .parent(Some(parent.into()))
+        .build(&mut c)
+        .expect("Failed to build nwg::ExternCanvas");
+    c
+}
+
 impl OpenGlCanvas {
     pub fn new<W: Into<nwg::ControlHandle>>(parent: W) -> Self {
-        let mut obj = Self::default();
-        nwg::ExternCanvas::builder()
-            .parent(Some(parent.into()))
-            .build(&mut obj.canvas)
-            .expect("Failed to build nwg::ExternCanvas");
+        let canvas = make_extern_canvas(parent);
 
-        obj.create_context();
-        obj
-    }
+        let ctx;
+        let img_prgm;
+        let draw_prgm;
+        let drawing;
+        let points_vb;
+        let points_vao;
+        let img_vb;
+        let img_vao;
+        let img_tex;
+        let shape_vb;
+        let shape_vao;
+        let shape_tex;
+        let dimensions;
 
-    fn create_context(&self) {
-        use std::{ffi::c_void, mem, ptr};
-
+        #[allow(unreachable_code)]
         unsafe {
-            let ctx = ContextBuilder::new()
+            use std::{ffi::c_void, mem, ptr};
+
+            ctx = ContextBuilder::new()
                 .with_gl(GlRequest::Specific(Api::OpenGl, (3, 3)))
                 .with_gl_profile(GlProfile::Core)
-                .build_raw_context(self.canvas.handle.hwnd().unwrap() as *mut c_void)
+                .build_raw_context(canvas.handle.hwnd().unwrap() as *mut c_void)
                 .expect("Failed to build opengl context")
                 .make_current()
                 .expect("Failed to set opengl context as current");
@@ -111,65 +125,82 @@ impl OpenGlCanvas {
             let img_fs = Shader::build(ShaderType::Fragment, include_str!("fs.glsl"));
             let draw_fs = Shader::build(ShaderType::Fragment, include_str!("blue.glsl"));
 
-            self.img_prgm.set(Program::build(&vs, &img_fs)).unwrap();
-            self.draw_prgm.set(Program::build(&vs, &draw_fs)).unwrap();
+            img_prgm = Program::build(&vs, &img_fs);
+            draw_prgm = Program::build(&vs, &draw_fs);
 
-            self.drawing.replace(Default::default());
+            drawing = Default::default();
 
-            let points_vb = Buffer::new();
-            self.points_vb.set(points_vb).unwrap();
-            self.update_drawing();
+            points_vb = Buffer::new();
+            points_vb.bind(BufferTarget::Array);
+            {
+                //todo!("fix the below line or something");
+            }
+            // self.update_drawing();
 
-            let points_vao = VertexArray::new();
+            points_vao = VertexArray::new();
             points_vao.bind();
-            self.points_vao.set(points_vao).unwrap();
             gl::EnableVertexAttribArray(0);
             let stride = mem::size_of::<f32>() * 2;
             gl::VertexAttribPointer(0, 2, gl::FLOAT, 0, stride as _, ptr::null());
 
-            let img_vb = Buffer::new();
+            img_vb = Buffer::new();
             img_vb.bind(BufferTarget::Array);
             Buffer::buffer_data(BufferTarget::Array, &[0_f32; 8], Usage::StaticDraw).unwrap();
-            self.img_vb.set(img_vb).unwrap();
 
-            let img_vao = VertexArray::new();
+            img_vao = VertexArray::new();
             img_vao.bind();
-            self.img_vao.set(img_vao).unwrap();
             gl::EnableVertexAttribArray(0);
             gl::VertexAttribPointer(0, 2, gl::FLOAT, 0, stride as _, ptr::null());
 
-            let img_tex = Texture::new();
+            img_tex = Texture::new();
             img_tex.bind(TextureTarget::Rectangle);
-            self.img_tex.set(img_tex).unwrap();
 
-            let shape_vb = Buffer::new();
+            shape_vb = Buffer::new();
             shape_vb.bind(BufferTarget::Array);
             Buffer::buffer_data(BufferTarget::Array, &[0_f32; 8], Usage::StaticDraw).unwrap();
-            self.shape_vb.set(shape_vb).unwrap();
 
-            let shape_vao = VertexArray::new();
+            shape_vao = VertexArray::new();
             shape_vao.bind();
-            self.shape_vao.set(shape_vao).unwrap();
             gl::EnableVertexAttribArray(0);
             gl::VertexAttribPointer(0, 2, gl::FLOAT, 0, stride as _, ptr::null());
 
-            let shape_tex = Texture::new();
+            shape_tex = Texture::new();
             shape_tex.bind(TextureTarget::Rectangle);
-            self.shape_tex.set(shape_tex).unwrap();
 
             gl::PointSize(5.0);
             gl::Enable(gl::BLEND);
             gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
             check_errors().unwrap();
 
-            let default_dims = Dimensions {
+            dimensions = Dimensions {
                 screen_dims: [100.0, 100.0],
                 scene_pos: [0.0, 0.0],
                 scale: 1.0,
             };
-            self.set_dimensions(default_dims);
+        }
 
-            self.ctx.set(ctx).expect("context was already created");
+        Self {
+            ctx: ctx.into(),
+            canvas,
+
+            img_prgm: img_prgm.into(),
+            draw_prgm: draw_prgm.into(),
+
+            img_vb: img_vb.into(),
+            points_vb: points_vb.into(),
+            shape_vb: shape_vb.into(),
+
+            img_vao: img_vao.into(),
+            points_vao: points_vao.into(),
+            shape_vao: shape_vao.into(),
+
+            img_tex: img_tex.into(),
+            shape_tex: shape_tex.into(),
+
+            drawing,
+
+            dimensions: dimensions.into(),
+            drawing_pos: Default::default(),
         }
     }
 
