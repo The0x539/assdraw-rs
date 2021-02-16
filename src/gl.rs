@@ -78,6 +78,9 @@ pub struct OpenGlCanvas {
 
     dimensions: Cell<Dimensions>,
     drawing_pos: Cell<Point>,
+
+    drawing_color: Cell<[u8; 3]>,
+    shape_color: Cell<[u8; 3]>,
 }
 
 struct DrawingData {
@@ -223,6 +226,9 @@ impl OpenGlCanvas {
 
             dimensions: Cell::new(dimensions),
             drawing_pos: Cell::new(Point::default()),
+
+            drawing_color: Cell::new([0, 0, 255]),
+            shape_color: Cell::new([127, 127, 127]),
         }
     }
 
@@ -238,29 +244,44 @@ impl OpenGlCanvas {
         unsafe {
             gl::Clear(gl::COLOR_BUFFER_BIT);
 
+            let uniform = |prog: &Program, name| prog.get_uniform_location(name).unwrap().unwrap();
+
             self.img_vao.bind();
             gl::UseProgram(*self.img_prgm);
-            self.update_dimension_uniforms();
+            self.update_dimension_uniforms(&self.img_prgm);
             self.img_tex.bind(TextureTarget::Rectangle);
             gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
 
             self.shape_vao.bind();
             gl::UseProgram(*self.shape_prgm);
-            self.update_dimension_uniforms();
-            let pos_loc = self
-                .img_prgm
-                .get_uniform_location(cstr!("drawing_pos"))
-                .unwrap()
-                .unwrap();
+
+            self.update_dimension_uniforms(&self.img_prgm);
+
+            let pos_loc = uniform(&self.shape_prgm, cstr!("drawing_pos"));
             let pos = self.drawing_pos.get();
             gl::Uniform2f(*pos_loc, pos.x, pos.y);
+
+            {
+                let color_loc = uniform(&self.shape_prgm, cstr!("u_Color"));
+                let [r, g, b] = self.shape_color.get();
+                gl::Uniform3ui(*color_loc, r as _, g as _, b as _);
+            }
+
             self.shape_tex.bind(TextureTarget::Rectangle);
             gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
             gl::Uniform2f(*pos_loc, 0.0, 0.0);
 
             self.points_vao.bind();
             gl::UseProgram(*self.draw_prgm);
-            self.update_dimension_uniforms();
+
+            self.update_dimension_uniforms(&self.draw_prgm);
+
+            {
+                let color_loc = uniform(&self.draw_prgm, cstr!("u_Color"));
+                let [r, g, b] = self.drawing_color.get();
+                gl::Uniform3ui(*color_loc, r as _, g as _, b as _);
+            }
+
             gl::DrawArrays(gl::POINTS, 0, self.drawing_points().len() as i32);
             gl::DrawArrays(gl::LINE_STRIP, 0, self.drawing_points().len() as i32);
 
@@ -293,9 +314,8 @@ impl OpenGlCanvas {
         self.dimensions.set(dims);
     }
 
-    fn update_dimension_uniforms(&self) {
+    fn update_dimension_uniforms(&self, prog: &Program) {
         let dims = self.get_dimensions();
-        let prog = &self.img_prgm;
 
         let uniform = |name| prog.get_uniform_location(name).unwrap().unwrap();
         let screen_dims_loc = uniform(cstr!("screen_dims"));
@@ -538,5 +558,13 @@ impl OpenGlCanvas {
             self.shape_vb.bind(BufferTarget::Array);
             Buffer::buffer_data(BufferTarget::Array, vertex_data, Usage::StaticDraw).unwrap();
         }
+    }
+
+    pub fn recolor_drawing(&self, rgb: [u8; 3]) {
+        self.drawing_color.set(rgb);
+    }
+
+    pub fn recolor_shape(&self, rgb: [u8; 3]) {
+        self.shape_color.set(rgb);
     }
 }

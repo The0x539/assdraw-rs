@@ -37,6 +37,10 @@ pub struct AppInner {
     paste_image_btn: nwg::Button,
     clear_drawing_btn: nwg::Button,
     copy_drawing_btn: nwg::Button,
+    drawing_color_btn: nwg::Button,
+    shape_color_btn: nwg::Button,
+
+    color_dialog: nwg::ColorDialog,
 
     left_dragging: Cell<bool>,
     right_dragging: Cell<bool>,
@@ -253,6 +257,18 @@ impl AppInner {
         let img = image::codecs::bmp::BmpDecoder::new(cursor).unwrap();
         self.get_canvas().set_image(img);
     }
+
+    fn choose_color(&self, for_drawing: bool) {
+        if !self.color_dialog.run(Some(&self.window)) {
+            return;
+        }
+        let rgb = self.color_dialog.color();
+        if for_drawing {
+            self.get_canvas().recolor_drawing(rgb);
+        } else {
+            self.get_canvas().recolor_shape(rgb);
+        }
+    }
 }
 
 pub struct App {
@@ -290,6 +306,8 @@ impl nwg::NativeUi<App> for AppBuilder {
         let paste_image_btn = make_button("bg")?;
         let clear_drawing_btn = make_button("clear")?;
         let copy_drawing_btn = make_button("copy")?;
+        let drawing_color_btn = make_button("drawing color")?;
+        let shape_color_btn = make_button("shape color")?;
 
         let mut grid = Default::default();
         nwg::GridLayout::builder()
@@ -300,7 +318,12 @@ impl nwg::NativeUi<App> for AppBuilder {
             .child_item(nwg::GridLayoutItem::new(&paste_image_btn, 3, 0, 1, 1))
             .child_item(nwg::GridLayoutItem::new(&clear_drawing_btn, 3, 1, 1, 1))
             .child_item(nwg::GridLayoutItem::new(&copy_drawing_btn, 3, 2, 1, 1))
+            .child_item(nwg::GridLayoutItem::new(&drawing_color_btn, 3, 3, 1, 1))
+            .child_item(nwg::GridLayoutItem::new(&shape_color_btn, 3, 4, 1, 1))
             .build(&mut grid)?;
+
+        let mut color_dialog = Default::default();
+        nwg::ColorDialog::builder().build(&mut color_dialog)?;
 
         let inner = Rc::new(AppInner {
             window,
@@ -310,6 +333,10 @@ impl nwg::NativeUi<App> for AppBuilder {
             paste_image_btn,
             clear_drawing_btn,
             copy_drawing_btn,
+            drawing_color_btn,
+            shape_color_btn,
+
+            color_dialog,
 
             left_dragging: Default::default(),
             right_dragging: Default::default(),
@@ -337,6 +364,10 @@ impl nwg::NativeUi<App> for AppBuilder {
                     ui.clear_drawing();
                 } else if handle == ui.copy_drawing_btn {
                     ui.copy_drawing().unwrap();
+                } else if handle == ui.drawing_color_btn {
+                    ui.choose_color(true);
+                } else if handle == ui.shape_color_btn {
+                    ui.choose_color(false);
                 }
             }
         };
