@@ -493,11 +493,13 @@ impl OpenGlCanvas {
             }
         }
 
-        //img_buf.clear();
-        img_buf.resize(width as usize * height as usize, 0);
+        img_buf.clear();
+        let buf_size = width as usize * height as usize;
+        img_buf.reserve(buf_size);
         rasterizer.for_each_pixel(|i, v| {
+            debug_assert_eq!(i, img_buf.len());
             let px = (v * 127.0) as u8;
-            img_buf[i] = px;
+            img_buf.push(px);
         });
 
         self.drawing_pos.set([x0, y0].into());
