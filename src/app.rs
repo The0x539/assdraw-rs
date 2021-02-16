@@ -33,6 +33,7 @@ pub struct AppInner {
     pub canvas: OnceCell<Canvas>,
     canvas_handler: OnceCell<nwg::EventHandler>,
     paste_image_btn: nwg::Button,
+    clear_drawing_btn: nwg::Button,
 
     left_dragging: Cell<bool>,
     right_dragging: Cell<bool>,
@@ -61,6 +62,10 @@ impl AppInner {
             dims.scene_pos[1] + y as f32 / dims.scale,
         );
         self.get_canvas().add_point(scene_x, scene_y);
+    }
+
+    fn clear_drawing(&self) {
+        self.get_canvas().clear_drawing();
     }
 
     fn show(self: Rc<Self>) {
@@ -231,6 +236,12 @@ impl nwg::NativeUi<App> for AppBuilder {
             .text("bg")
             .build(&mut paste_image_btn)?;
 
+        let mut clear_drawing_btn = Default::default();
+        nwg::Button::builder()
+            .parent(&window)
+            .text("clear")
+            .build(&mut clear_drawing_btn)?;
+
         let mut grid = Default::default();
         nwg::GridLayout::builder()
             .parent(&window)
@@ -238,6 +249,7 @@ impl nwg::NativeUi<App> for AppBuilder {
             .max_row(Some(8))
             //.child_item(nwg::GridLayoutItem::new(&canvas, 0, 0, 3, 8))
             .child_item(nwg::GridLayoutItem::new(&paste_image_btn, 3, 0, 1, 1))
+            .child_item(nwg::GridLayoutItem::new(&clear_drawing_btn, 3, 1, 1, 1))
             .build(&mut grid)?;
 
         let inner = Rc::new(AppInner {
@@ -246,6 +258,7 @@ impl nwg::NativeUi<App> for AppBuilder {
             canvas,
             canvas_handler: OnceCell::new(),
             paste_image_btn,
+            clear_drawing_btn,
 
             left_dragging: Default::default(),
             right_dragging: Default::default(),
@@ -263,9 +276,11 @@ impl nwg::NativeUi<App> for AppBuilder {
                     Event::OnWindowClose => ui.exit(),
                     _ => (),
                 }
-            } else if handle == ui.paste_image_btn {
-                if evt == Event::OnButtonClick {
+            } else if evt == Event::OnButtonClick {
+                if handle == ui.paste_image_btn {
                     ui.paste_image();
+                } else if handle == ui.clear_drawing_btn {
+                    ui.clear_drawing();
                 }
             }
         };

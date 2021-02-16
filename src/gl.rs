@@ -351,6 +351,33 @@ impl OpenGlCanvas {
         Some((x, y))
     }
 
+    pub fn clear_drawing(&self) {
+        let mut drawing = self.drawing.borrow_mut();
+        drawing.points.clear();
+        drawing.pixels.clear();
+        unsafe {
+            self.points_vb.bind(BufferTarget::Array);
+            Buffer::buffer_data(BufferTarget::Array, &drawing.points, Usage::StaticDraw).unwrap();
+
+            let vertex_data = [0.0; 8];
+            self.shape_vb.bind(BufferTarget::Array);
+            Buffer::buffer_data(BufferTarget::Array, &vertex_data, Usage::StaticDraw).unwrap();
+
+            self.shape_tex.bind(TextureTarget::Rectangle);
+            gl::TexImage2D(
+                gl::TEXTURE_RECTANGLE,
+                0,
+                gl::RGBA8 as _,
+                0,
+                0,
+                0,
+                gl::BGRA,
+                gl::UNSIGNED_INT_8_8_8_8,
+                drawing.pixels.as_ptr().cast(),
+            );
+        }
+    }
+
     pub fn update_drawing(&self) {
         let drawing = self.drawing.borrow_mut();
 
