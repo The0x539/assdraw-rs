@@ -4,24 +4,12 @@ use nwg::NativeUi;
 
 mod app;
 mod ass_outline;
-mod canvas;
+//mod canvas;
 mod drawing;
 mod gl;
 mod vk;
 
 pub use crate::gl::abstraction;
-
-fn _othermain() {
-    nwg::init().expect("Failed to init NWG");
-    use canvas::Canvas;
-    let app = Canvas::build_ui(Canvas::default()).expect("Failed to build UI");
-    app.canvas.create_context();
-    app.canvas.render();
-
-    nwg::dispatch_thread_events_with_callback(move || {
-        app.canvas.render();
-    });
-}
 
 fn main() {
     nwg::init().unwrap();
