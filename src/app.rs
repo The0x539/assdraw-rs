@@ -133,6 +133,7 @@ impl AppInner {
     fn resize_canvas(&self) {
         if let Some(canvas) = self.canvas.get() {
             canvas.resize();
+            canvas.render();
         }
     }
     fn exit(&self) {
@@ -323,7 +324,9 @@ impl nwg::NativeUi<App> for AppBuilder {
             if handle == ui.window.handle {
                 match evt {
                     Event::OnInit => AppInner::show(ui),
-                    Event::OnResize | Event::OnWindowMaximize => ui.resize_canvas(),
+                    Event::OnResize | Event::OnWindowMaximize | Event::OnResizeEnd => {
+                        ui.resize_canvas()
+                    }
                     Event::OnWindowClose => ui.exit(),
                     _ => (),
                 }
