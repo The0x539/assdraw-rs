@@ -61,6 +61,7 @@ pub struct OpenGlCanvas {
 
     img_prgm: Program,
     draw_prgm: Program,
+    shape_prgm: Program,
 
     img_vb: Buffer,
     points_vb: Buffer,
@@ -80,8 +81,7 @@ pub struct OpenGlCanvas {
 }
 
 struct DrawingData {
-    // TODO: alpha-only data. should be faster
-    pixels: Vec<u32>,
+    pixels: Vec<u8>,
     points: Vec<Point>,
     rasterizer: Rasterizer,
 }
@@ -131,12 +131,14 @@ impl OpenGlCanvas {
             ctx
         };
 
-        let (img_prgm, draw_prgm) = {
+        let (img_prgm, draw_prgm, shape_prgm) = {
             let vs = Shader::build(ShaderType::Vertex, include_str!("vs.glsl"));
             let img_fs = Shader::build(ShaderType::Fragment, include_str!("fs.glsl"));
             let draw_fs = Shader::build(ShaderType::Fragment, include_str!("blue.glsl"));
+            let shape_fs = Shader::build(ShaderType::Fragment, include_str!("draw.glsl"));
 
-            (Program::build(&vs, &img_fs), Program::build(&vs, &draw_fs))
+            let build = |fs| Program::build(&vs, fs);
+            (build(&img_fs), build(&draw_fs), build(&shape_fs))
         };
 
         let drawing = RefCell::new(DrawingData::default());
@@ -204,6 +206,7 @@ impl OpenGlCanvas {
 
             img_prgm,
             draw_prgm,
+            shape_prgm,
 
             img_vb,
             points_vb,
@@ -242,6 +245,7 @@ impl OpenGlCanvas {
             gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
 
             self.shape_vao.bind();
+            gl::UseProgram(*self.shape_prgm);
             self.update_dimension_uniforms();
             let pos_loc = self
                 .img_prgm
@@ -455,6 +459,16 @@ impl OpenGlCanvas {
         let y1 = bbox.y_max as f32 / 64.0;
         let (width, height) = (x1 - x0, y1 - y0);
 
+        // If I don't do this, then using GL_R8/GL_RED seems to break in a weird way.
+        // I wish I knew why. Something about stride/alignment, maybe?
+        let width = {
+            if width % 4.0 == 0.0 {
+                width
+            } else {
+                4.0 + (width - (width % 4.0))
+            }
+        };
+
         let (mut rasterizer, mut img_buf) =
             RefMut::map_split(drawing, |r| (&mut r.rasterizer, &mut r.pixels));
         rasterizer.reset(width as usize, height as usize);
@@ -481,10 +495,9 @@ impl OpenGlCanvas {
 
         //img_buf.clear();
         img_buf.resize(width as usize * height as usize, 0);
-        rasterizer.for_each_pixel_2d(|x, y, v| {
-            let i = x as usize + (y as usize * width as usize);
+        rasterizer.for_each_pixel(|i, v| {
             let px = (v * 127.0) as u8;
-            img_buf[i] = u32::from_ne_bytes([px, 127, 127, 127]);
+            img_buf[i] = px;
         });
 
         self.drawing_pos.set([x0, y0].into());
@@ -511,12 +524,12 @@ impl OpenGlCanvas {
             gl::TexImage2D(
                 gl::TEXTURE_RECTANGLE,
                 0,
-                gl::RGBA8 as _,
+                gl::R8 as _,
                 width as _,
                 height as _,
                 0,
-                gl::BGRA,
-                gl::UNSIGNED_INT_8_8_8_8,
+                gl::RED,
+                gl::UNSIGNED_BYTE,
                 img_buf.as_ptr().cast(),
             );
 
