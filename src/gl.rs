@@ -81,6 +81,7 @@ pub struct OpenGlCanvas {
 
     drawing_color: Cell<[u8; 3]>,
     shape_color: Cell<[u8; 3]>,
+    shape_alpha: Cell<u8>,
 }
 
 struct DrawingData {
@@ -229,6 +230,7 @@ impl OpenGlCanvas {
 
             drawing_color: Cell::new([0, 0, 255]),
             shape_color: Cell::new([127, 127, 127]),
+            shape_alpha: Cell::new(50),
         }
     }
 
@@ -265,6 +267,11 @@ impl OpenGlCanvas {
                 let color_loc = uniform(&self.shape_prgm, cstr!("u_Color"));
                 let [r, g, b] = self.shape_color.get();
                 gl::Uniform3ui(*color_loc, r as _, g as _, b as _);
+            }
+
+            {
+                let alpha_loc = uniform(&self.shape_prgm, cstr!("u_Alpha"));
+                gl::Uniform1ui(*alpha_loc, self.shape_alpha.get() as _);
             }
 
             self.shape_tex.bind(TextureTarget::Rectangle);
@@ -518,7 +525,7 @@ impl OpenGlCanvas {
         img_buf.reserve(buf_size);
         rasterizer.for_each_pixel(|i, v| {
             debug_assert_eq!(i, img_buf.len());
-            let px = (v * 127.0) as u8;
+            let px = (v * 512.0) as u8;
             img_buf.push(px);
         });
 
@@ -566,5 +573,9 @@ impl OpenGlCanvas {
 
     pub fn recolor_shape(&self, rgb: [u8; 3]) {
         self.shape_color.set(rgb);
+    }
+
+    pub fn set_shape_alpha(&self, alpha: u8) {
+        self.shape_alpha.set(alpha);
     }
 }

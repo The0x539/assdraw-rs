@@ -39,7 +39,7 @@ pub struct AppInner {
     copy_drawing_btn: nwg::Button,
     drawing_color_btn: nwg::Button,
     shape_color_btn: nwg::Button,
-
+    shape_alpha_slider: nwg::TrackBar,
     color_dialog: nwg::ColorDialog,
 
     left_dragging: Cell<bool>,
@@ -269,6 +269,11 @@ impl AppInner {
             self.get_canvas().recolor_shape(rgb);
         }
     }
+
+    fn update_shape_alpha(&self) {
+        self.get_canvas()
+            .set_shape_alpha(self.shape_alpha_slider.pos() as u8);
+    }
 }
 
 pub struct App {
@@ -309,6 +314,12 @@ impl nwg::NativeUi<App> for AppBuilder {
         let drawing_color_btn = make_button("drawing color")?;
         let shape_color_btn = make_button("shape color")?;
 
+        let mut shape_alpha_slider = Default::default();
+        nwg::TrackBar::builder()
+            .parent(&window)
+            .build(&mut shape_alpha_slider)?;
+        shape_alpha_slider.set_pos(50);
+
         let mut grid = Default::default();
         nwg::GridLayout::builder()
             .parent(&window)
@@ -320,6 +331,7 @@ impl nwg::NativeUi<App> for AppBuilder {
             .child_item(nwg::GridLayoutItem::new(&copy_drawing_btn, 3, 2, 1, 1))
             .child_item(nwg::GridLayoutItem::new(&drawing_color_btn, 3, 3, 1, 1))
             .child_item(nwg::GridLayoutItem::new(&shape_color_btn, 3, 4, 1, 1))
+            .child_item(nwg::GridLayoutItem::new(&shape_alpha_slider, 3, 5, 1, 1))
             .build(&mut grid)?;
 
         let mut color_dialog = Default::default();
@@ -335,7 +347,7 @@ impl nwg::NativeUi<App> for AppBuilder {
             copy_drawing_btn,
             drawing_color_btn,
             shape_color_btn,
-
+            shape_alpha_slider,
             color_dialog,
 
             left_dragging: Default::default(),
@@ -368,6 +380,10 @@ impl nwg::NativeUi<App> for AppBuilder {
                     ui.choose_color(true);
                 } else if handle == ui.shape_color_btn {
                     ui.choose_color(false);
+                }
+            } else if evt == Event::OnHorizontalScroll {
+                if handle == ui.shape_alpha_slider {
+                    ui.update_shape_alpha();
                 }
             }
         };
