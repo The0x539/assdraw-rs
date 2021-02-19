@@ -1,11 +1,15 @@
-use std::ops::{Add, AddAssign, Div, Shr, ShrAssign, Sub, SubAssign};
+use crate::point::Point;
 
+/*
 #[derive(Debug, Default, Copy, Clone)]
 pub struct Vector {
     pub x: i32,
     pub y: i32,
 }
+*/
+pub type Vector = Point<i32>;
 
+/*
 impl Vector {
     #[inline]
     #[allow(dead_code)]
@@ -122,12 +126,17 @@ impl Div<i32> for Vector {
         }
     }
 }
+*/
 
+/*
 #[derive(Debug, Default, Copy, Clone)]
 pub struct DVector {
     pub x: f64,
     pub y: f64,
 }
+*/
+#[allow(dead_code)]
+pub type DVector = Point<f64>;
 
 #[derive(Debug, Default, Copy, Clone)]
 pub struct Rect {

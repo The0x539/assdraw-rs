@@ -36,6 +36,7 @@ pub struct Dimensions {
     pub scale: GLfloat,
 }
 
+/*
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone)]
 pub struct Point {
@@ -54,6 +55,8 @@ impl From<[f32; 2]> for Point {
         Self { x, y }
     }
 }
+*/
+pub type Point = crate::point::Point<f32>;
 
 pub struct OpenGlCanvas {
     ctx: Ctx,
