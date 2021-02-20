@@ -45,6 +45,7 @@ dependencies = [
  "bytemuck",
  "clipboard-win",
  "cstr",
+ "either",
  "gl",
  "glutin",
  "image",

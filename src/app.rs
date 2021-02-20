@@ -1,5 +1,4 @@
 use std::cell::Cell;
-use std::fmt::Write;
 use std::rc::Rc;
 
 use once_cell::unsync::OnceCell;
@@ -8,6 +7,7 @@ use native_windows_gui as nwg;
 use nwg::Event;
 
 type Canvas = crate::gl::OpenGlCanvas;
+use crate::drawing::{Command, CommandKind};
 use crate::gl::Point;
 
 fn change_scale(mut scale: f32, factor: i32) -> f32 {
@@ -73,7 +73,14 @@ impl AppInner {
 
     fn add_point_at_cursor(&self) {
         let point = self.get_point_at_cursor();
-        self.get_canvas().add_point(point);
+        self.get_canvas().with_drawing(|drawing| {
+            let cmd = if drawing.points().len() == 0 {
+                Command::Move(point)
+            } else {
+                Command::Line(point)
+            };
+            drawing.push(cmd);
+        })
     }
 
     fn clear_drawing(&self) {
@@ -81,18 +88,30 @@ impl AppInner {
     }
 
     fn copy_drawing(&self) -> std::fmt::Result {
-        let points = self.get_canvas().drawing_points();
-        if points.len() == 0 {
-            return Ok(());
-        }
-        let mut data = format!("m {} {}", points[0].x, points[0].y);
-        if points.len() > 2 {
-            write!(data, " l")?;
-            for xy in &points[1..] {
-                write!(data, " {} {}", xy.x, xy.y)?;
+        let text = self.get_canvas().with_drawing(|drawing| {
+            let mut data = Vec::new();
+            let mut last_kind = None;
+            for cmd in drawing.commands() {
+                let element = match cmd {
+                    Command::Move(p) | Command::Line(p) if last_kind == Some(cmd.kind()) => {
+                        format!("{} {}", p.x, p.y)
+                    }
+                    Command::Move(p) => format!("m {} {}", p.x, p.y),
+                    Command::Line(p) => format!("l {} {}", p.x, p.y),
+                    Command::Bezier(p1, p2, p3) => {
+                        if last_kind == Some(CommandKind::Bezier) {
+                            format!("{} {} {} {} {} {}", p1.x, p1.y, p2.x, p2.y, p3.x, p3.y)
+                        } else {
+                            format!("b {} {} {} {} {} {}", p1.x, p1.y, p2.x, p2.y, p3.x, p3.y)
+                        }
+                    }
+                };
+                last_kind = Some(cmd.kind());
+                data.push(element);
             }
-        }
-        clipboard_win::set_clipboard_string(&data).unwrap_or((/* ignore */));
+            data.join(" ")
+        });
+        clipboard_win::set_clipboard_string(&text).unwrap_or((/* ignore */));
         Ok(())
     }
 
@@ -193,7 +212,7 @@ impl AppInner {
         if self.left_dragging.get() {
             if let Some(i) = self.dragged_point.get() {
                 self.get_canvas()
-                    .update_point(i, self.get_point_at_cursor());
+                    .with_drawing(|drawing| drawing.points_mut()[i] = self.get_point_at_cursor());
             }
         }
     }
@@ -211,18 +230,20 @@ impl AppInner {
                 let cursor_pos = self.get_point_at_cursor();
                 let canvas = self.get_canvas();
                 let scale = canvas.get_dimensions().scale;
-                for (i, point) in canvas.drawing_points().iter().enumerate() {
-                    let dx = cursor_pos.x - point.x;
-                    let dy = cursor_pos.y - point.y;
-                    if f32::max(dx.abs(), dy.abs()) <= 5.0 / scale {
-                        drag_idx = Some(i);
-                        break;
+                canvas.with_drawing(|drawing| {
+                    for (i, point) in drawing.points().iter().enumerate() {
+                        let dx = cursor_pos.x - point.x;
+                        let dy = cursor_pos.y - point.y;
+                        if f32::max(dx.abs(), dy.abs()) <= 5.0 / scale {
+                            drag_idx = Some(i);
+                            break;
+                        }
                     }
-                }
-                if drag_idx.is_none() {
-                    self.add_point_at_cursor();
-                    drag_idx = Some(canvas.drawing_points().len() - 1);
-                }
+                    if drag_idx.is_none() {
+                        self.add_point_at_cursor();
+                        drag_idx = Some(drawing.points().len() - 1);
+                    }
+                });
                 self.dragged_point.set(drag_idx);
 
                 self.left_dragging.set(true);

@@ -27,6 +27,7 @@ impl<T> Point<T> {
         Point::new(T::from(point.x), T::from(point.y))
     }
 
+    /*
     #[inline]
     pub fn into<U>(self) -> Point<U>
     where
@@ -34,6 +35,7 @@ impl<T> Point<T> {
     {
         Point::new(self.x.into(), self.y.into())
     }
+    */
 
     #[inline]
     pub fn try_from<U>(point: Point<U>) -> Result<Self, T::Error>
@@ -87,6 +89,26 @@ impl<T> From<Point<T>> for [T; 2] {
     #[inline]
     fn from(point: Point<T>) -> Self {
         [point.x, point.y]
+    }
+}
+
+impl From<ab_glyph_rasterizer::Point> for Point<f32> {
+    #[inline]
+    fn from(point: ab_glyph_rasterizer::Point) -> Self {
+        Self {
+            x: point.x,
+            y: point.y,
+        }
+    }
+}
+
+impl From<Point<f32>> for ab_glyph_rasterizer::Point {
+    #[inline]
+    fn from(point: Point<f32>) -> Self {
+        Self {
+            x: point.x,
+            y: point.y,
+        }
     }
 }
 

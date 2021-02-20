@@ -10,7 +10,7 @@ use ab_glyph_rasterizer::Rasterizer;
 use cstr::cstr;
 use image::ImageDecoder;
 
-use std::cell::{Cell, Ref, RefCell, RefMut};
+use std::cell::{Cell, RefCell, RefMut};
 use std::convert::TryInto;
 
 pub mod abstraction;
@@ -57,6 +57,7 @@ impl From<[f32; 2]> for Point {
 }
 */
 pub type Point = crate::point::Point<f32>;
+use crate::drawing::{Drawing, Segment};
 
 pub struct OpenGlCanvas {
     ctx: Ctx,
@@ -89,7 +90,7 @@ pub struct OpenGlCanvas {
 
 struct DrawingData {
     pixels: Vec<u8>,
-    points: Vec<Point>,
+    drawing: Drawing<Point>,
     rasterizer: Rasterizer,
 }
 
@@ -97,7 +98,7 @@ impl Default for DrawingData {
     fn default() -> Self {
         Self {
             pixels: Vec::new(),
-            points: Vec::new(),
+            drawing: Drawing::new(),
             rasterizer: Rasterizer::new(0, 0),
         }
     }
@@ -237,6 +238,7 @@ impl OpenGlCanvas {
         }
     }
 
+    /*
     pub fn drawing_points(&self) -> Ref<Vec<Point>> {
         Ref::map(self.drawing.borrow(), |x| &x.points)
     }
@@ -244,6 +246,7 @@ impl OpenGlCanvas {
     fn drawing_points_mut(&self) -> RefMut<Vec<Point>> {
         RefMut::map(self.drawing.borrow_mut(), |x| &mut x.points)
     }
+    */
 
     pub fn render(&self) {
         unsafe {
@@ -292,8 +295,9 @@ impl OpenGlCanvas {
                 gl::Uniform3ui(*color_loc, r as _, g as _, b as _);
             }
 
-            gl::DrawArrays(gl::POINTS, 0, self.drawing_points().len() as i32);
-            gl::DrawArrays(gl::LINE_STRIP, 0, self.drawing_points().len() as i32);
+            let n_points = self.drawing.borrow().drawing.points().len() as i32;
+            gl::DrawArrays(gl::POINTS, 0, n_points);
+            gl::DrawArrays(gl::LINE_STRIP, 0, n_points);
 
             check_errors().unwrap();
 
@@ -387,31 +391,24 @@ impl OpenGlCanvas {
         }
     }
 
-    pub fn add_point(&self, point: Point) {
-        self.drawing_points_mut().push(point);
+    pub fn with_drawing<F, T>(&self, f: F) -> T
+    where
+        F: FnOnce(&mut Drawing<Point>) -> T,
+    {
+        let mut drawing_data = self.drawing.borrow_mut();
+        let ret = f(&mut drawing_data.drawing);
+        drop(drawing_data);
         self.update_drawing();
-    }
-
-    pub fn update_point(&self, i: usize, point: Point) {
-        self.drawing_points_mut()[i] = point;
-        self.update_drawing();
-    }
-
-    pub fn pop_point(&self) -> Option<Point> {
-        let mut points = self.drawing_points_mut();
-        let p = points.pop()?;
-        drop(points);
-        self.update_drawing();
-        Some(p)
+        ret
     }
 
     pub fn clear_drawing(&self) {
         let mut drawing = self.drawing.borrow_mut();
-        drawing.points.clear();
-        drawing.pixels.clear();
+        drawing.drawing.clear();
         unsafe {
             self.points_vb.bind(BufferTarget::Array);
-            Buffer::buffer_data(BufferTarget::Array, &drawing.points, Usage::StaticDraw).unwrap();
+            let points = drawing.drawing.points();
+            Buffer::buffer_data(BufferTarget::Array, points, Usage::StaticDraw).unwrap();
 
             let vertex_data = [0.0; 8];
             self.shape_vb.bind(BufferTarget::Array);
@@ -433,61 +430,29 @@ impl OpenGlCanvas {
     }
 
     pub fn update_drawing(&self) {
-        let drawing = self.drawing.borrow_mut();
+        let data = self.drawing.borrow_mut();
 
-        unsafe {
-            self.points_vb.bind(BufferTarget::Array);
-            Buffer::buffer_data(
-                BufferTarget::Array,
-                drawing.points.as_slice(),
-                Usage::StaticDraw,
-            )
-            .unwrap();
-        }
+        let mut line_points = vec![];
 
-        let points = &drawing.points;
-        if points.len() < 3 {
-            return;
-        }
-
-        /*
-        let mut text = format!("m {} {} l", points[0], points[1]);
-        for point in &points[2..] {
-            use std::fmt::Write;
-            write!(&mut text, " {}", point).unwrap();
-        }
-
-        let (segments, bbox) = crate::drawing::parse_drawing(text);
-        */
-
-        use crate::ass_outline::{Segment, Vector};
-
-        let mut bbox = crate::ass_outline::Rect::default();
-        bbox.reset();
+        let (mut x_min, mut y_min, mut x_max, mut y_max) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
         let mut segments = vec![];
-        fn point_to_vector(p: Point) -> Vector {
-            Vector {
-                x: (p.x * 64.0) as i32,
-                y: (p.y * 64.0) as i32,
-            }
-        }
-        for ps in points.windows(2) {
-            let v0 = point_to_vector(ps[0]);
-            let v1 = point_to_vector(ps[1]);
-            bbox.update_point(v0);
-            bbox.update_point(v1);
-            segments.push(Segment::LineSegment(v0, v1));
-        }
-        segments.push(Segment::LineSegment(
-            point_to_vector(points[points.len() - 1]),
-            point_to_vector(points[0]),
-        ));
+        for seg in data.drawing.segments() {
+            for pt in seg.points() {
+                x_min = x_min.min(pt.x);
+                y_min = y_min.min(pt.y);
+                x_max = x_max.max(pt.x);
+                y_max = y_max.max(pt.y);
 
-        let x0 = bbox.x_min as f32 / 64.0;
-        let x1 = bbox.x_max as f32 / 64.0;
-        let y0 = bbox.y_min as f32 / 64.0;
-        let y1 = bbox.y_max as f32 / 64.0;
-        let (width, height) = (x1 - x0, y1 - y0);
+                // For a line segment, push each end.
+                // For a bezier, eventually do something fancier,
+                // but for now, draw from endpoints to handles.
+                // This just so happens to work out.
+                line_points.push(pt);
+            }
+            segments.push(seg);
+        }
+
+        let (width, height) = (x_max - x_min, y_max - y_min);
 
         // If I don't do this, then using GL_R8/GL_RED seems to break in a weird way.
         // I wish I knew why. Something about stride/alignment, maybe?
@@ -500,25 +465,16 @@ impl OpenGlCanvas {
         };
 
         let (mut rasterizer, mut img_buf) =
-            RefMut::map_split(drawing, |r| (&mut r.rasterizer, &mut r.pixels));
+            RefMut::map_split(data, |r| (&mut r.rasterizer, &mut r.pixels));
         rasterizer.reset(width as usize, height as usize);
 
         for segment in segments {
-            use ab_glyph_rasterizer::Point;
-            let cnv = |p: Vector| -> Point {
-                let x = p.x as f32 / 64.0;
-                let y = p.y as f32 / 64.0;
-                (x - x0, y - y0).into()
-            };
             match segment {
-                Segment::LineSegment(p0, p1) => {
-                    rasterizer.draw_line(cnv(p0), cnv(p1));
+                Segment::Line(p0, p1) => {
+                    rasterizer.draw_line(p0.into(), p1.into());
                 }
-                Segment::QuadSpline(p0, p1, p2) => {
-                    rasterizer.draw_quad(cnv(p0), cnv(p1), cnv(p2));
-                }
-                Segment::CubicSpline(p0, p1, p2, p3) => {
-                    rasterizer.draw_cubic(cnv(p0), cnv(p1), cnv(p2), cnv(p3));
+                Segment::Bezier(p0, p1, p2, p3) => {
+                    rasterizer.draw_cubic(p0.into(), p1.into(), p2.into(), p3.into())
                 }
             }
         }
@@ -532,18 +488,9 @@ impl OpenGlCanvas {
             img_buf.push(px);
         });
 
-        self.drawing_pos.set([x0, y0].into());
+        self.drawing_pos.set(Point::new(x_min, y_min));
 
         unsafe {
-            /*
-            #[rustfmt::skip]
-            let vertex_data = &[
-                x0, y0,
-                x1, y0,
-                x0, y1,
-                x1, y1,
-            ];
-            */
             #[rustfmt::skip]
             let vertex_data = &[
                 0.0, 0.0,

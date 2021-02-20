@@ -3,7 +3,7 @@ use native_windows_gui as nwg;
 use nwg::NativeUi;
 
 mod app;
-mod ass_outline;
+//mod ass_outline;
 //mod canvas;
 mod drawing;
 mod gl;
