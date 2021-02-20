@@ -80,7 +80,7 @@ impl AppInner {
                 Command::Line(point)
             };
             drawing.push(cmd);
-        })
+        });
     }
 
     fn clear_drawing(&self) {
@@ -230,6 +230,7 @@ impl AppInner {
                 let cursor_pos = self.get_point_at_cursor();
                 let canvas = self.get_canvas();
                 let scale = canvas.get_dimensions().scale;
+                let mut n_points = 0;
                 canvas.with_drawing(|drawing| {
                     for (i, point) in drawing.points().iter().enumerate() {
                         let dx = cursor_pos.x - point.x;
@@ -239,11 +240,12 @@ impl AppInner {
                             break;
                         }
                     }
-                    if drag_idx.is_none() {
-                        self.add_point_at_cursor();
-                        drag_idx = Some(drawing.points().len() - 1);
-                    }
+                    n_points = drawing.points().len();
                 });
+                if drag_idx.is_none() {
+                    self.add_point_at_cursor();
+                    drag_idx = Some(n_points);
+                }
                 self.dragged_point.set(drag_idx);
 
                 self.left_dragging.set(true);

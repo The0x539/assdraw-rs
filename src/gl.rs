@@ -432,7 +432,17 @@ impl OpenGlCanvas {
     pub fn update_drawing(&self) {
         let data = self.drawing.borrow_mut();
 
-        let mut line_points = vec![];
+        unsafe {
+            println!("point alpha");
+            self.points_vb.bind(BufferTarget::Array);
+            println!("point beta");
+            Buffer::buffer_data(
+                BufferTarget::Array,
+                data.drawing.points(),
+                Usage::StaticDraw,
+            )
+            .unwrap();
+        }
 
         let (mut x_min, mut y_min, mut x_max, mut y_max) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
         let mut segments = vec![];
@@ -442,12 +452,6 @@ impl OpenGlCanvas {
                 y_min = y_min.min(pt.y);
                 x_max = x_max.max(pt.x);
                 y_max = y_max.max(pt.y);
-
-                // For a line segment, push each end.
-                // For a bezier, eventually do something fancier,
-                // but for now, draw from endpoints to handles.
-                // This just so happens to work out.
-                line_points.push(pt);
             }
             segments.push(seg);
         }
