@@ -97,6 +97,14 @@ impl<T> Point<T> {
     {
         Point::new(self.x.abs(), self.y.abs())
     }
+
+    #[inline]
+    pub fn lerp(self, other: Self, t: f32) -> Self
+    where
+        Self: Mul<f32, Output = Self> + Add<Self, Output = Self>,
+    {
+        self * (1.0 - t) + other * t
+    }
 }
 
 impl<T> From<(T, T)> for Point<T> {

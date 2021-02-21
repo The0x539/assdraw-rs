@@ -40,6 +40,9 @@ pub struct AppInner {
     drawing_color_btn: nwg::Button,
     shape_color_btn: nwg::Button,
     shape_alpha_slider: nwg::TrackBar,
+    move_mode_btn: nwg::RadioButton,
+    line_mode_btn: nwg::RadioButton,
+    bezier_mode_btn: nwg::RadioButton,
     color_dialog: nwg::ColorDialog,
 
     left_dragging: Cell<bool>,
@@ -47,6 +50,7 @@ pub struct AppInner {
     dragged_point: Cell<Option<usize>>,
     pre_drag_pos: Cell<Point<f32>>,
     drag_start_pos: Cell<Point<i32>>,
+    draw_mode: Cell<CommandKind>,
 }
 
 impl AppInner {
@@ -71,10 +75,20 @@ impl AppInner {
     fn add_point_at_cursor(&self) {
         let point = self.get_point_at_cursor();
         self.get_canvas().with_drawing(|drawing| {
-            let cmd = if drawing.points().len() == 0 {
+            let cmd = if drawing.points().is_empty() {
                 Command::Move(point)
             } else {
-                Command::Line(point)
+                match self.draw_mode.get() {
+                    CommandKind::Move => Command::Move(point),
+                    CommandKind::Line => Command::Line(point),
+                    CommandKind::Bezier => {
+                        let p0 = *drawing.points().last().unwrap();
+                        let p3 = point;
+                        let p1 = p0.lerp(p3, 0.3333);
+                        let p2 = p0.lerp(p3, 0.6667);
+                        Command::Bezier(p1, p2, p3)
+                    }
+                }
             };
             drawing.push(cmd);
         });
@@ -119,7 +133,7 @@ impl AppInner {
         let canvas = Canvas::new(&self.window);
 
         self.grid
-            .add_child_item(nwg::GridLayoutItem::new(canvas.handle(), 0, 0, 3, 8));
+            .add_child_item(nwg::GridLayoutItem::new(canvas.handle(), 0, 0, 3, 9));
 
         canvas.resize();
 
@@ -219,7 +233,6 @@ impl AppInner {
                 let cursor_pos = self.get_point_at_cursor();
                 let canvas = self.get_canvas();
                 let scale = canvas.get_dimensions().scale;
-                let mut n_points = 0;
                 canvas.with_drawing(|drawing| {
                     for (i, point) in drawing.points().iter().enumerate() {
                         let dx = cursor_pos.x - point.x;
@@ -229,11 +242,10 @@ impl AppInner {
                             break;
                         }
                     }
-                    n_points = drawing.points().len();
                 });
                 if drag_idx.is_none() {
                     self.add_point_at_cursor();
-                    drag_idx = Some(n_points);
+                    drag_idx = Some(canvas.with_drawing(|d| d.points().len()));
                 }
                 self.dragged_point.set(drag_idx);
 
@@ -326,6 +338,19 @@ impl nwg::NativeUi<App> for AppBuilder {
         let drawing_color_btn = make_button("drawing color")?;
         let shape_color_btn = make_button("shape color")?;
 
+        let make_radio_button = |text| {
+            let mut btn = Default::default();
+            nwg::RadioButton::builder()
+                .parent(&window)
+                .text(text)
+                .build(&mut btn)?;
+            Ok(btn)
+        };
+
+        let move_mode_btn = make_radio_button("move")?;
+        let line_mode_btn = make_radio_button("line")?;
+        let bezier_mode_btn = make_radio_button("bezier")?;
+
         let mut shape_alpha_slider = Default::default();
         nwg::TrackBar::builder()
             .parent(&window)
@@ -336,7 +361,7 @@ impl nwg::NativeUi<App> for AppBuilder {
         nwg::GridLayout::builder()
             .parent(&window)
             .max_column(Some(4))
-            .max_row(Some(8))
+            .max_row(Some(9))
             //.child_item(nwg::GridLayoutItem::new(&canvas, 0, 0, 3, 8))
             .child_item(nwg::GridLayoutItem::new(&paste_image_btn, 3, 0, 1, 1))
             .child_item(nwg::GridLayoutItem::new(&clear_drawing_btn, 3, 1, 1, 1))
@@ -344,6 +369,9 @@ impl nwg::NativeUi<App> for AppBuilder {
             .child_item(nwg::GridLayoutItem::new(&drawing_color_btn, 3, 3, 1, 1))
             .child_item(nwg::GridLayoutItem::new(&shape_color_btn, 3, 4, 1, 1))
             .child_item(nwg::GridLayoutItem::new(&shape_alpha_slider, 3, 5, 1, 1))
+            .child_item(nwg::GridLayoutItem::new(&move_mode_btn, 3, 6, 1, 1))
+            .child_item(nwg::GridLayoutItem::new(&line_mode_btn, 3, 7, 1, 1))
+            .child_item(nwg::GridLayoutItem::new(&bezier_mode_btn, 3, 8, 1, 1))
             .build(&mut grid)?;
 
         let mut color_dialog = Default::default();
@@ -360,6 +388,9 @@ impl nwg::NativeUi<App> for AppBuilder {
             drawing_color_btn,
             shape_color_btn,
             shape_alpha_slider,
+            move_mode_btn,
+            line_mode_btn,
+            bezier_mode_btn,
             color_dialog,
 
             left_dragging: Default::default(),
@@ -367,6 +398,7 @@ impl nwg::NativeUi<App> for AppBuilder {
             dragged_point: Default::default(),
             pre_drag_pos: Default::default(),
             drag_start_pos: Default::default(),
+            draw_mode: Cell::new(CommandKind::Line),
         });
 
         let ui = Rc::downgrade(&inner);
@@ -392,6 +424,12 @@ impl nwg::NativeUi<App> for AppBuilder {
                     ui.choose_color(true);
                 } else if handle == ui.shape_color_btn {
                     ui.choose_color(false);
+                } else if handle == ui.move_mode_btn {
+                    ui.draw_mode.set(CommandKind::Move);
+                } else if handle == ui.line_mode_btn {
+                    ui.draw_mode.set(CommandKind::Line);
+                } else if handle == ui.bezier_mode_btn {
+                    ui.draw_mode.set(CommandKind::Bezier);
                 }
             } else if evt == Event::OnHorizontalScroll {
                 if handle == ui.shape_alpha_slider {
