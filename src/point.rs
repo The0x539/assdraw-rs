@@ -4,7 +4,7 @@ use std::ops::{
     ShrAssign, Sub, SubAssign,
 };
 
-use num_traits::Signed;
+use num_traits::{NumCast, Signed, ToPrimitive};
 
 #[repr(C)]
 #[derive(Debug, Default, Copy, Clone, PartialEq, Eq)]
@@ -51,6 +51,43 @@ impl<T> Point<T> {
     {
         let (x, y) = (self.x.try_into()?, self.y.try_into()?);
         Ok(Point::new(x, y))
+    }
+
+    #[inline]
+    pub fn map<F, U>(self, mut f: F) -> Point<U>
+    where
+        F: FnMut(T) -> U,
+    {
+        let (x, y) = (f(self.x), f(self.y));
+        Point::new(x, y)
+    }
+
+    #[inline]
+    pub fn try_map<F, U, E>(self, mut f: F) -> Result<Point<U>, E>
+    where
+        F: FnMut(T) -> Result<U, E>,
+    {
+        let (x, y) = (f(self.x)?, f(self.y)?);
+        Ok(Point::new(x, y))
+    }
+
+    #[inline]
+    pub fn try_cast<U>(self) -> Option<Point<U>>
+    where
+        T: ToPrimitive,
+        U: NumCast,
+    {
+        let (x, y) = (U::from(self.x)?, U::from(self.y)?);
+        Some(Point::new(x, y))
+    }
+
+    #[inline]
+    pub fn cast<U>(self) -> Point<U>
+    where
+        T: ToPrimitive,
+        U: NumCast,
+    {
+        self.try_cast().unwrap()
     }
 
     #[inline]
