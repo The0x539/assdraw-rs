@@ -201,10 +201,13 @@ where
                 let next_pen_pos = self.points.next()?;
                 let prev_pen_pos = std::mem::replace(&mut self.pen, next_pen_pos);
 
-                // If there was an open shape, close it.
-                self.shape_start
-                    .take()
-                    .map(|start| Segment::Line(prev_pen_pos, start))
+                if let Some(start) = self.shape_start.take() {
+                    // If there was an open shape, close it.
+                    Some(Segment::Line(prev_pen_pos, start))
+                } else {
+                    // Otherwise, don't conclude iteration; try to get the next segment.
+                    self.next()
+                }
             }
             CommandKind::Line => {
                 let next_pen_pos = self.points.next()?;

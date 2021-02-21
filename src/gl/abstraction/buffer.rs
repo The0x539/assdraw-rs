@@ -1,4 +1,4 @@
-use gl::types::{GLenum, GLsizei, GLuint};
+use gl::types::{GLboolean, GLenum, GLsizei, GLuint};
 
 use super::error::{check_errors, Result};
 
@@ -78,6 +78,18 @@ impl Buffer {
         check_errors().unwrap();
         // TODO: transmute or something?
         buf.into_iter().map(Self).collect()
+    }
+
+    pub fn is_buffer(&self) -> bool {
+        let val: GLboolean = unsafe { gl::IsBuffer(self.0) };
+        match val {
+            gl::TRUE => true,
+            gl::FALSE => false,
+            n => {
+                eprintln!("glIsBuffer returned unexpected value: {}", n);
+                false
+            }
+        }
     }
 
     pub unsafe fn bind(&self, target: BufferTarget) {

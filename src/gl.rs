@@ -433,9 +433,7 @@ impl OpenGlCanvas {
         let data = self.drawing.borrow_mut();
 
         unsafe {
-            println!("point alpha");
             self.points_vb.bind(BufferTarget::Array);
-            println!("point beta");
             Buffer::buffer_data(
                 BufferTarget::Array,
                 data.drawing.points(),
@@ -456,7 +454,14 @@ impl OpenGlCanvas {
             segments.push(seg);
         }
 
+        if segments.is_empty() {
+            return;
+        }
+
         let (width, height) = (x_max - x_min, y_max - y_min);
+        assert_ne!(x_min, f32::MAX);
+        assert_ne!(y_min, f32::MAX);
+        let top_left = Point::new(x_min, y_min);
 
         // If I don't do this, then using GL_R8/GL_RED seems to break in a weird way.
         // I wish I knew why. Something about stride/alignment, maybe?
@@ -472,13 +477,12 @@ impl OpenGlCanvas {
             RefMut::map_split(data, |r| (&mut r.rasterizer, &mut r.pixels));
         rasterizer.reset(width as usize, height as usize);
 
+        let cnv = |p| ab_glyph_rasterizer::Point::from(p - top_left);
         for segment in segments {
             match segment {
-                Segment::Line(p0, p1) => {
-                    rasterizer.draw_line(p0.into(), p1.into());
-                }
+                Segment::Line(p0, p1) => rasterizer.draw_line(cnv(p0), cnv(p1)),
                 Segment::Bezier(p0, p1, p2, p3) => {
-                    rasterizer.draw_cubic(p0.into(), p1.into(), p2.into(), p3.into())
+                    rasterizer.draw_cubic(cnv(p0), cnv(p1), cnv(p2), cnv(p3))
                 }
             }
         }
@@ -491,6 +495,7 @@ impl OpenGlCanvas {
             let px = (v * 512.0) as u8;
             img_buf.push(px);
         });
+        assert_eq!(img_buf.len(), buf_size);
 
         self.drawing_pos.set(Point::new(x_min, y_min));
 
