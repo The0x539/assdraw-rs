@@ -46,7 +46,7 @@ pub struct AppInner {
     right_dragging: Cell<bool>,
     dragged_point: Cell<Option<usize>>,
     pre_drag_pos: Cell<Point<f32>>,
-    drag_start_pos: Cell<(i32, i32)>,
+    drag_start_pos: Cell<Point<i32>>,
 }
 
 impl AppInner {
@@ -54,8 +54,8 @@ impl AppInner {
         self.canvas.get().unwrap()
     }
 
-    fn cursor_pos(&self) -> (i32, i32) {
-        nwg::GlobalCursor::local_position(self.get_canvas().handle(), None)
+    fn cursor_pos(&self) -> Point<i32> {
+        nwg::GlobalCursor::local_position(self.get_canvas().handle(), None).into()
     }
 
     fn is_dragging(&self) -> bool {
@@ -63,12 +63,9 @@ impl AppInner {
     }
 
     fn get_point_at_cursor(&self) -> Point<f32> {
-        let (x, y) = self.cursor_pos();
         let dims = self.get_canvas().get_dimensions();
-        Point {
-            x: dims.scene_pos.x + x as f32 / dims.scale,
-            y: dims.scene_pos.y + y as f32 / dims.scale,
-        }
+        let cursor_pos = self.cursor_pos().cast::<f32>();
+        dims.scene_pos + (cursor_pos / dims.scale)
     }
 
     fn add_point_at_cursor(&self) {
@@ -168,19 +165,14 @@ impl AppInner {
             _ => panic!(),
         };
         self.get_canvas().update_dimensions(|dims| {
-            let (mouse_x, mouse_y) = self.cursor_pos();
-            let [mouse_x, mouse_y] = [mouse_x as f32, mouse_y as f32];
-            let [mouse_scene_x, mouse_scene_y] = [
-                dims.scene_pos.x + mouse_x / dims.scale,
-                dims.scene_pos.y + mouse_y / dims.scale,
-            ];
+            // this is the same code as get_point_at_cursor
+            // TODO: figure out how to avoid RefCell rules preventing the use of that function here
+            let mouse_pos = self.cursor_pos().cast::<f32>();
+            let mouse_scene_pos = dims.scene_pos + (mouse_pos / dims.scale);
 
             let new_scale = change_scale(dims.scale, factor);
 
-            let new_scene_pos = Point {
-                x: mouse_scene_x - (mouse_x / new_scale),
-                y: mouse_scene_y - (mouse_y / new_scale),
-            };
+            let new_scene_pos = mouse_scene_pos - (mouse_pos / new_scale);
 
             if self.right_dragging.get() {
                 self.pre_drag_pos.set(new_scene_pos);
@@ -197,16 +189,13 @@ impl AppInner {
         }
 
         let xy0 = self.pre_drag_pos.get();
-        let (x0, y0) = (xy0.x, xy0.y);
-        let (dx0, dy0) = self.drag_start_pos.get();
-        let (dx1, dy1) = self.cursor_pos();
-        let (dx, dy) = (dx1 - dx0, dy1 - dy0);
+        let dxy0 = self.drag_start_pos.get();
+        let dxy1 = self.cursor_pos();
+        let dxy = dxy1 - dxy0;
 
         if self.right_dragging.get() {
             self.get_canvas().update_dimensions(|dims| {
-                let x = x0 - (dx as f32) / dims.scale;
-                let y = y0 - (dy as f32) / dims.scale;
-                dims.scene_pos = [x, y].into();
+                dims.scene_pos = xy0 - (dxy.cast::<f32>() / dims.scale);
             })
         }
         if self.left_dragging.get() {
