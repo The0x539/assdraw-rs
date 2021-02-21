@@ -40,6 +40,7 @@ pub enum CommandKind {
 #[derive(Debug, Copy, Clone)]
 pub enum Segment<P> {
     Line(P, P),
+    ClosingLine(P, P),
     Bezier(P, P, P, P),
 }
 
@@ -49,7 +50,7 @@ impl<P> Segment<P> {
         let twice = |a, b| once(a).chain(once(b));
         let fourice = |a, b, c, d| twice(a, b).chain(twice(c, d));
         match self {
-            Self::Line(p0, p1) => Either::Left(twice(p0, p1)),
+            Self::Line(p0, p1) | Self::ClosingLine(p0, p1) => Either::Left(twice(p0, p1)),
             Self::Bezier(p0, p1, p2, p3) => Either::Right(fourice(p0, p1, p2, p3)),
         }
     }
@@ -192,7 +193,7 @@ where
                 return self
                     .shape_start
                     .take()
-                    .map(|start| Segment::Line(self.pen.clone(), start));
+                    .map(|start| Segment::ClosingLine(self.pen.clone(), start));
             }
         };
 
@@ -203,7 +204,7 @@ where
 
                 if let Some(start) = self.shape_start.take() {
                     // If there was an open shape, close it.
-                    Some(Segment::Line(prev_pen_pos, start))
+                    Some(Segment::ClosingLine(prev_pen_pos, start))
                 } else {
                     // Otherwise, don't conclude iteration; try to get the next segment.
                     self.next()

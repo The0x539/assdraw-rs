@@ -50,10 +50,12 @@ pub struct OpenGlCanvas {
 
     img_vb: Buffer,
     points_vb: Buffer,
+    lines_vb: Buffer,
     shape_vb: Buffer,
 
     img_vao: VertexArray,
     points_vao: VertexArray,
+    lines_vao: VertexArray,
     shape_vao: VertexArray,
 
     img_tex: Texture,
@@ -72,6 +74,7 @@ pub struct OpenGlCanvas {
 struct DrawingData {
     pixels: Vec<u8>,
     drawing: Drawing<Point<f32>>,
+    n_lines: usize,
     rasterizer: Rasterizer,
 }
 
@@ -81,6 +84,7 @@ impl Default for DrawingData {
             pixels: Vec::new(),
             drawing: Drawing::new(),
             rasterizer: Rasterizer::new(0, 0),
+            n_lines: 0,
         }
     }
 }
@@ -146,6 +150,18 @@ impl OpenGlCanvas {
             (vb, vao)
         };
 
+        let (lines_vb, lines_vao) = unsafe {
+            let vb = Buffer::new();
+            vb.bind(BufferTarget::Array);
+
+            let vao = VertexArray::new();
+            vao.bind();
+            gl::EnableVertexAttribArray(0);
+            gl::VertexAttribPointer(0, 2, gl::FLOAT, 0, VEC2_STRIDE, NULL);
+
+            (vb, vao)
+        };
+
         let (img_vb, img_vao, img_tex) = unsafe {
             let vb = Buffer::new();
             vb.bind(BufferTarget::Array);
@@ -199,10 +215,12 @@ impl OpenGlCanvas {
 
             img_vb,
             points_vb,
+            lines_vb,
             shape_vb,
 
             img_vao,
             points_vao,
+            lines_vao,
             shape_vao,
 
             img_tex,
@@ -268,7 +286,10 @@ impl OpenGlCanvas {
 
             let n_points = self.drawing.borrow().drawing.points().len() as i32;
             gl::DrawArrays(gl::POINTS, 0, n_points);
-            gl::DrawArrays(gl::LINE_STRIP, 0, n_points);
+
+            self.lines_vao.bind();
+            let n_lines = self.drawing.borrow().n_lines as i32;
+            gl::DrawArrays(gl::LINES, 0, n_lines * 4);
 
             check_errors().unwrap();
 
@@ -381,6 +402,8 @@ impl OpenGlCanvas {
             let points = drawing.drawing.points();
             Buffer::buffer_data(BufferTarget::Array, points, Usage::StaticDraw).unwrap();
 
+            drawing.n_lines = 0;
+
             let vertex_data = [0.0; 8];
             self.shape_vb.bind(BufferTarget::Array);
             Buffer::buffer_data(BufferTarget::Array, &vertex_data, Usage::StaticDraw).unwrap();
@@ -401,7 +424,7 @@ impl OpenGlCanvas {
     }
 
     pub fn update_drawing(&self) {
-        let data = self.drawing.borrow_mut();
+        let mut data = self.drawing.borrow_mut();
 
         unsafe {
             self.points_vb.bind(BufferTarget::Array);
@@ -415,6 +438,7 @@ impl OpenGlCanvas {
 
         let (mut x_min, mut y_min, mut x_max, mut y_max) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
         let mut segments = vec![];
+        let mut line_data = vec![];
         for seg in data.drawing.segments() {
             for pt in seg.points() {
                 x_min = x_min.min(pt.x);
@@ -423,15 +447,36 @@ impl OpenGlCanvas {
                 y_max = y_max.max(pt.y);
             }
             segments.push(seg);
+
+            match seg {
+                Segment::Line(p0, p1) => {
+                    line_data.push((p0, p1));
+                }
+                // Don't draw a line for a shape's closing line.
+                Segment::ClosingLine(..) => (),
+                Segment::Bezier(p0, p1, p2, p3) => {
+                    line_data.push((p0, p1));
+                    line_data.push((p2, p3));
+                }
+            }
         }
 
         if segments.is_empty() {
             return;
         }
 
-        let (width, height) = (x_max - x_min, y_max - y_min);
+        data.n_lines = line_data.len();
+        unsafe {
+            self.lines_vb.bind(BufferTarget::Array);
+            Buffer::buffer_data(BufferTarget::Array, &line_data, Usage::StaticDraw).unwrap();
+        }
+
         assert_ne!(x_min, f32::MAX);
         assert_ne!(y_min, f32::MAX);
+        let (width, height) = (x_max - x_min, y_max - y_min);
+        if width <= 0.0 || height <= 0.0 {
+            return;
+        }
         let top_left = Point::new(x_min, y_min);
 
         // If I don't do this, then using GL_R8/GL_RED seems to break in a weird way.
@@ -451,7 +496,9 @@ impl OpenGlCanvas {
         let cnv = |p| ab_glyph_rasterizer::Point::from(p - top_left);
         for segment in segments {
             match segment {
-                Segment::Line(p0, p1) => rasterizer.draw_line(cnv(p0), cnv(p1)),
+                Segment::Line(p0, p1) | Segment::ClosingLine(p0, p1) => {
+                    rasterizer.draw_line(cnv(p0), cnv(p1));
+                }
                 Segment::Bezier(p0, p1, p2, p3) => {
                     rasterizer.draw_cubic(cnv(p0), cnv(p1), cnv(p2), cnv(p3))
                 }
