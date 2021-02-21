@@ -245,7 +245,7 @@ impl AppInner {
                 });
                 if drag_idx.is_none() {
                     self.add_point_at_cursor();
-                    drag_idx = Some(canvas.with_drawing(|d| d.points().len()));
+                    drag_idx = Some(canvas.with_drawing(|d| d.points().len() - 1));
                 }
                 self.dragged_point.set(drag_idx);
 
