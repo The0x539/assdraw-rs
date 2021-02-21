@@ -20,25 +20,23 @@ impl<T> Point<T> {
     }
 
     #[inline]
-    pub fn from<U>(point: Point<U>) -> Self
+    pub fn convert_from<U>(point: Point<U>) -> Self
     where
         T: From<U>,
     {
         Point::new(T::from(point.x), T::from(point.y))
     }
 
-    /*
     #[inline]
-    pub fn into<U>(self) -> Point<U>
+    pub fn convert_into<U>(self) -> Point<U>
     where
         T: Into<U>,
     {
         Point::new(self.x.into(), self.y.into())
     }
-    */
 
     #[inline]
-    pub fn try_from<U>(point: Point<U>) -> Result<Self, T::Error>
+    pub fn try_convert_from<U>(point: Point<U>) -> Result<Self, T::Error>
     where
         T: TryFrom<U>,
     {
@@ -47,7 +45,7 @@ impl<T> Point<T> {
     }
 
     #[inline]
-    pub fn try_into<U>(self) -> Result<Point<U>, T::Error>
+    pub fn try_convert_into<U>(self) -> Result<Point<U>, T::Error>
     where
         T: TryInto<U>,
     {
