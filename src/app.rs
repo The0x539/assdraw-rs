@@ -8,7 +8,7 @@ use nwg::Event;
 
 type Canvas = crate::gl::OpenGlCanvas;
 use crate::drawing::{Command, CommandKind};
-use crate::gl::Point;
+use crate::point::Point;
 
 fn change_scale(mut scale: f32, factor: i32) -> f32 {
     assert!(scale > 0.0);
@@ -45,7 +45,7 @@ pub struct AppInner {
     left_dragging: Cell<bool>,
     right_dragging: Cell<bool>,
     dragged_point: Cell<Option<usize>>,
-    pre_drag_pos: Cell<Point>,
+    pre_drag_pos: Cell<Point<f32>>,
     drag_start_pos: Cell<(i32, i32)>,
 }
 
@@ -62,7 +62,7 @@ impl AppInner {
         self.left_dragging.get() || self.right_dragging.get()
     }
 
-    fn get_point_at_cursor(&self) -> Point {
+    fn get_point_at_cursor(&self) -> Point<f32> {
         let (x, y) = self.cursor_pos();
         let dims = self.get_canvas().get_dimensions();
         Point {

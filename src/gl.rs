@@ -10,6 +10,8 @@ use ab_glyph_rasterizer::Rasterizer;
 use cstr::cstr;
 use image::ImageDecoder;
 
+use crate::point::Point;
+
 use std::cell::{Cell, RefCell, RefMut};
 use std::convert::TryInto;
 
@@ -31,32 +33,11 @@ use gl::types::{GLfloat, GLint};
 
 #[derive(Default, Copy, Clone, Debug)]
 pub struct Dimensions {
-    pub screen_dims: Point,
-    pub scene_pos: Point,
+    pub screen_dims: Point<f32>,
+    pub scene_pos: Point<f32>,
     pub scale: GLfloat,
 }
 
-/*
-#[repr(C)]
-#[derive(Debug, Default, Copy, Clone)]
-pub struct Point {
-    pub x: f32,
-    pub y: f32,
-}
-
-impl From<Point> for [f32; 2] {
-    fn from(value: Point) -> Self {
-        [value.x, value.y]
-    }
-}
-
-impl From<[f32; 2]> for Point {
-    fn from([x, y]: [f32; 2]) -> Self {
-        Self { x, y }
-    }
-}
-*/
-pub type Point = crate::point::Point<f32>;
 use crate::drawing::{Drawing, Segment};
 
 pub struct OpenGlCanvas {
@@ -81,7 +62,7 @@ pub struct OpenGlCanvas {
     drawing: RefCell<DrawingData>,
 
     dimensions: Cell<Dimensions>,
-    drawing_pos: Cell<Point>,
+    drawing_pos: Cell<Point<f32>>,
 
     drawing_color: Cell<[u8; 3]>,
     shape_color: Cell<[u8; 3]>,
@@ -90,7 +71,7 @@ pub struct OpenGlCanvas {
 
 struct DrawingData {
     pixels: Vec<u8>,
-    drawing: Drawing<Point>,
+    drawing: Drawing<Point<f32>>,
     rasterizer: Rasterizer,
 }
 
@@ -238,16 +219,6 @@ impl OpenGlCanvas {
         }
     }
 
-    /*
-    pub fn drawing_points(&self) -> Ref<Vec<Point>> {
-        Ref::map(self.drawing.borrow(), |x| &x.points)
-    }
-
-    fn drawing_points_mut(&self) -> RefMut<Vec<Point>> {
-        RefMut::map(self.drawing.borrow_mut(), |x| &mut x.points)
-    }
-    */
-
     pub fn render(&self) {
         unsafe {
             gl::Clear(gl::COLOR_BUFFER_BIT);
@@ -393,7 +364,7 @@ impl OpenGlCanvas {
 
     pub fn with_drawing<F, T>(&self, f: F) -> T
     where
-        F: FnOnce(&mut Drawing<Point>) -> T,
+        F: FnOnce(&mut Drawing<Point<f32>>) -> T,
     {
         let mut drawing_data = self.drawing.borrow_mut();
         let ret = f(&mut drawing_data.drawing);
