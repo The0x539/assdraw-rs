@@ -1,7 +1,7 @@
 use std::cell::{Cell, RefCell};
-use std::collections::HashSet;
 use std::rc::Rc;
 
+use byte_set::ByteSet;
 use once_cell::unsync::OnceCell;
 
 use native_windows_gui as nwg;
@@ -55,9 +55,9 @@ pub struct AppInner {
     keys: RefCell<Keys>,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Copy, Clone)]
 struct Keys {
-    keys: HashSet<u32>,
+    keys: ByteSet,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -70,24 +70,23 @@ enum KeyState {
 
 impl Keys {
     pub fn update(&mut self, ev: nwg::Event, key: u32) -> KeyState {
-        macro_rules! foo {
-            ($method:ident($arg:expr), $if:ident, $else:ident) => {
-                if self.keys.$method($arg) {
-                    KeyState::$if
-                } else {
-                    KeyState::$else
-                }
-            };
-        }
+        let key = key as u8;
+        let old = self.keys.contains(key);
         match ev {
-            nwg::Event::OnKeyPress => foo!(insert(key), Pressed, Down),
-            nwg::Event::OnKeyRelease => foo!(remove(&key), Released, Up),
-            _ => foo!(contains(&key), Down, Up),
+            nwg::Event::OnKeyPress => self.keys.insert(key),
+            nwg::Event::OnKeyRelease => self.keys.remove(key),
+            _ => (),
+        }
+        match (old, self.keys.contains(key)) {
+            (false, true) => KeyState::Pressed,
+            (true, false) => KeyState::Released,
+            (false, false) => KeyState::Up,
+            (true, true) => KeyState::Down,
         }
     }
 
     pub fn pressed(&self, key: u32) -> bool {
-        self.keys.contains(&key)
+        self.keys.contains(key as u8)
     }
 }
 
