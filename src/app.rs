@@ -1,4 +1,5 @@
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
+use std::collections::HashSet;
 use std::rc::Rc;
 
 use once_cell::unsync::OnceCell;
@@ -51,6 +52,43 @@ pub struct AppInner {
     pre_drag_pos: Cell<Point<f32>>,
     drag_start_pos: Cell<Point<i32>>,
     draw_mode: Cell<CommandKind>,
+    keys: RefCell<Keys>,
+}
+
+#[derive(Debug, Default, Clone)]
+struct Keys {
+    keys: HashSet<u32>,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+enum KeyState {
+    Pressed,
+    Released,
+    Up,
+    Down,
+}
+
+impl Keys {
+    pub fn update(&mut self, ev: nwg::Event, key: u32) -> KeyState {
+        macro_rules! foo {
+            ($method:ident($arg:expr), $if:ident, $else:ident) => {
+                if self.keys.$method($arg) {
+                    KeyState::$if
+                } else {
+                    KeyState::$else
+                }
+            };
+        }
+        match ev {
+            nwg::Event::OnKeyPress => foo!(insert(key), Pressed, Down),
+            nwg::Event::OnKeyRelease => foo!(remove(&key), Released, Up),
+            _ => foo!(contains(&key), Down, Up),
+        }
+    }
+
+    pub fn pressed(&self, key: u32) -> bool {
+        self.keys.contains(&key)
+    }
 }
 
 impl AppInner {
@@ -264,7 +302,9 @@ impl AppInner {
             }
             (true, false) => {
                 nwg::GlobalCursor::release();
-                self.dragged_point.take();
+                if self.dragged_point.take().is_some() {
+                    self.get_canvas().commit_drawing();
+                }
             }
             _ => (),
         }
@@ -399,10 +439,11 @@ impl nwg::NativeUi<App> for AppBuilder {
             pre_drag_pos: Default::default(),
             drag_start_pos: Default::default(),
             draw_mode: Cell::new(CommandKind::Line),
+            keys: Default::default(),
         });
 
         let ui = Rc::downgrade(&inner);
-        let handle_fn = move |evt, _evt_data, handle| {
+        let handle_fn = move |evt, evt_data: nwg::EventData, handle| {
             let ui = ui.upgrade().unwrap();
             if handle == ui.window.handle {
                 match evt {
@@ -411,6 +452,25 @@ impl nwg::NativeUi<App> for AppBuilder {
                         ui.resize_canvas()
                     }
                     Event::OnWindowClose => ui.exit(),
+                    Event::OnKeyPress | Event::OnKeyRelease => {
+                        let key = evt_data.on_key();
+                        let mut keys = ui.keys.borrow_mut();
+                        let state = keys.update(evt, key);
+                        if keys.pressed(nwg::keys::CONTROL) && state == KeyState::Pressed {
+                            match key {
+                                nwg::keys::_Z => {
+                                    ui.dragged_point.take();
+                                    if keys.pressed(nwg::keys::SHIFT) {
+                                        ui.get_canvas().redo();
+                                    } else {
+                                        ui.get_canvas().undo();
+                                    }
+                                }
+                                nwg::keys::_Y => ui.get_canvas().redo(),
+                                _ => (),
+                            }
+                        }
+                    }
                     _ => (),
                 }
             } else if evt == Event::OnButtonClick {

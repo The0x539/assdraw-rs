@@ -40,7 +40,7 @@ impl<T> UndoStack<T> {
         }
     }
 
-    pub fn push(&mut self, new_state: T) {
+    pub fn push_state(&mut self, new_state: T) {
         self.active = None;
         self.history.truncate(self.idx + 1);
         self.history.push(new_state);
@@ -49,7 +49,7 @@ impl<T> UndoStack<T> {
 
     pub fn commit(&mut self) {
         if let Some(new_state) = self.active.take() {
-            self.push(new_state);
+            self.push_state(new_state);
         }
     }
 }

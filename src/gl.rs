@@ -11,6 +11,7 @@ use cstr::cstr;
 use image::ImageDecoder;
 
 use crate::point::Point;
+use crate::undo::UndoStack;
 
 use std::cell::{Cell, RefCell, RefMut};
 use std::convert::TryInto;
@@ -73,7 +74,7 @@ pub struct OpenGlCanvas {
 
 struct DrawingData {
     pixels: Vec<u8>,
-    drawing: Drawing<Point<f32>>,
+    drawing: UndoStack<Drawing<Point<f32>>>,
     n_lines: usize,
     rasterizer: Rasterizer,
 }
@@ -82,7 +83,7 @@ impl Default for DrawingData {
     fn default() -> Self {
         Self {
             pixels: Vec::new(),
-            drawing: Drawing::new(),
+            drawing: UndoStack::new(Drawing::new()),
             rasterizer: Rasterizer::new(0, 0),
             n_lines: 0,
         }
@@ -385,13 +386,25 @@ impl OpenGlCanvas {
 
     pub fn with_drawing<F, T>(&self, f: F) -> T
     where
-        F: FnOnce(&mut Drawing<Point<f32>>) -> T,
+        F: FnOnce(&mut UndoStack<Drawing<Point<f32>>>) -> T,
     {
         let mut drawing_data = self.drawing.borrow_mut();
         let ret = f(&mut drawing_data.drawing);
         drop(drawing_data);
         self.update_drawing();
         ret
+    }
+
+    pub fn commit_drawing(&self) {
+        self.drawing.borrow_mut().drawing.commit();
+    }
+
+    pub fn undo(&self) {
+        self.with_drawing(UndoStack::undo);
+    }
+
+    pub fn redo(&self) {
+        self.with_drawing(UndoStack::redo);
     }
 
     pub fn clear_drawing(&self) {
