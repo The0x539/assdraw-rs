@@ -8,6 +8,7 @@ mod app;
 mod drawing;
 mod gl;
 mod point;
+mod undo;
 mod vk;
 
 pub use crate::gl::abstraction;
