@@ -444,6 +444,9 @@ impl nwg::NativeUi<App> for AppBuilder {
         let ui = Rc::downgrade(&inner);
         let handle_fn = move |evt, evt_data: nwg::EventData, handle| {
             let ui = ui.upgrade().unwrap();
+            if matches!(evt, Event::OnKeyPress | Event::OnKeyRelease) {
+                ui.window.set_focus();
+            }
             if handle == ui.window.handle {
                 match evt {
                     Event::OnInit => AppInner::show(ui),
