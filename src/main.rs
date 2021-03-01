@@ -9,7 +9,7 @@ mod drawing;
 mod gl;
 mod point;
 mod undo;
-mod vk;
+//mod vk;
 
 pub use crate::gl::abstraction;
 

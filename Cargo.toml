@@ -6,7 +6,6 @@ edition = "2018"
 
 [dependencies]
 native-windows-gui = "1.0.10"
-native-windows-derive = "1.0.3"
 glutin = "0.26.0"
 gl = "0.14.0"
 bytemuck = "1.5.0"
@@ -18,9 +17,10 @@ cstr = "0.2.8"
 once_cell = "1.5.2"
 itertools = "0.10.0"
 ab_glyph_rasterizer = "0.1.4"
-vulkano = "0.20.0"
 winapi = "0.3.9"
 num-traits = "0.2.14"
 either = "1.6.1"
 byte_set = "0.1.3"
 
+[profile.release]
+lto = true
