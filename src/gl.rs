@@ -527,7 +527,7 @@ impl OpenGlCanvas {
         img_buf.reserve(buf_size);
         rasterizer.for_each_pixel(|i, v| {
             debug_assert_eq!(i, img_buf.len());
-            let px = (v * 512.0) as u8;
+            let px = (v * 256.0) as u8;
             img_buf.push(px);
         });
         assert_eq!(img_buf.len(), buf_size);
