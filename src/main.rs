@@ -10,6 +10,7 @@ mod gl;
 mod point;
 mod undo;
 //mod vk;
+mod nwg_util;
 
 pub use crate::gl::abstraction;
 

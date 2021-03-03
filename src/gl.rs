@@ -10,6 +10,7 @@ use ab_glyph_rasterizer::Rasterizer;
 use cstr::cstr;
 use image::ImageDecoder;
 
+use crate::nwg_util::SaneBuilder;
 use crate::point::Point;
 use crate::undo::UndoStack;
 
@@ -91,13 +92,11 @@ impl Default for DrawingData {
 }
 
 fn make_extern_canvas<W: Into<nwg::ControlHandle>>(parent: W) -> nwg::ExternCanvas {
-    let mut c = nwg::ExternCanvas::default();
     nwg::ExternCanvas::builder()
         .parent(Some(parent.into()))
         .position((100, 0))
-        .build(&mut c)
-        .expect("Failed to build nwg::ExternCanvas");
-    c
+        .construct()
+        .expect("Failed to build nwg::ExternCanvas")
 }
 
 #[allow(dead_code)]

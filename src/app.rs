@@ -9,6 +9,7 @@ use nwg::Event;
 
 type Canvas = crate::gl::OpenGlCanvas;
 use crate::drawing::{Command, CommandKind};
+use crate::nwg_util::SaneBuilder;
 use crate::point::Point;
 
 fn change_scale(mut scale: f32, factor: i32) -> f32 {
@@ -348,39 +349,30 @@ pub struct App {
 
 impl nwg::NativeUi<App> for AppBuilder {
     fn build_ui(_data: Self) -> Result<App, nwg::NwgError> {
-        let mut window = Default::default();
-        nwg::Window::builder()
+        let window = nwg::Window::builder()
             .size((600, 500))
             .position((300, 300))
             .title("nwg")
             .flags(nwg::WindowFlags::MAIN_WINDOW)
-            .build(&mut window)?;
+            .construct()?;
 
         // we'll initialize this later, eh?
         let canvas = OnceCell::new();
-        /*
-        nwg::ExternCanvas::builder()
-            .parent(Some(&window))
-            .build(&mut *canvas)?;
-        */
 
-        let mut font = Default::default();
-        nwg::Font::builder()
+        let font = nwg::Font::builder()
             .family("Segoe UI")
             .weight(400)
             .size(18)
-            .build(&mut font)?;
+            .construct()?;
 
         nwg::Font::set_global_default(Some(font));
 
         let make_button = |text, x, y| {
-            let mut btn = Default::default();
             nwg::Button::builder()
                 .parent(&window)
                 .text(text)
                 .position((x, y))
-                .build(&mut btn)?;
-            Ok(btn)
+                .construct()
         };
 
         let paste_image_btn = make_button("bg", 0, 0)?;
@@ -390,28 +382,24 @@ impl nwg::NativeUi<App> for AppBuilder {
         let shape_color_btn = make_button("shape color", 0, 100)?;
 
         let make_radio_button = |text, x, y| {
-            let mut btn = Default::default();
             nwg::RadioButton::builder()
                 .parent(&window)
                 .text(text)
                 .position((x, y))
-                .build(&mut btn)?;
-            Ok(btn)
+                .construct()
         };
 
         let move_mode_btn = make_radio_button("move", 0, 150)?;
         let line_mode_btn = make_radio_button("line", 0, 175)?;
         let bezier_mode_btn = make_radio_button("bezier", 0, 200)?;
 
-        let mut shape_alpha_slider = Default::default();
-        nwg::TrackBar::builder()
+        let shape_alpha_slider = nwg::TrackBar::builder()
             .parent(&window)
             .position((0, 125))
-            .build(&mut shape_alpha_slider)?;
+            .construct()?;
         shape_alpha_slider.set_pos(50);
 
-        let mut color_dialog = Default::default();
-        nwg::ColorDialog::builder().build(&mut color_dialog)?;
+        let color_dialog = nwg::ColorDialog::builder().construct()?;
 
         let inner = Rc::new(AppInner {
             window,
