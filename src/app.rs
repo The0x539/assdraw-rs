@@ -360,6 +360,15 @@ impl nwg::NativeUi<App> for AppBuilder {
             .build(&mut *canvas)?;
         */
 
+        let mut font = Default::default();
+        nwg::Font::builder()
+            .family("Segoe UI")
+            .weight(400)
+            .size(18)
+            .build(&mut font)?;
+
+        nwg::Font::set_global_default(Some(font));
+
         let make_button = |text, x, y| {
             let mut btn = Default::default();
             nwg::Button::builder()
