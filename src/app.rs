@@ -452,6 +452,12 @@ impl nwg::NativeUi<App> for AppBuilder {
                                     }
                                 }
                                 nwg::keys::_Y => ui.get_canvas().redo(),
+                                nwg::keys::_C => ui.copy_drawing().unwrap(),
+                                nwg::keys::_V => {
+                                    // TODO: paste either a drawing or the image depending on cb
+                                    // careful: pasting the image should be a history entry
+                                    ui.paste_image();
+                                }
                                 _ => (),
                             }
                         }
