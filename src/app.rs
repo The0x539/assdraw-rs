@@ -199,10 +199,14 @@ impl AppInner {
 
     fn handle_resize(&self) {
         if let Some(canvas) = self.canvas.get() {
-            let (x, y) = self.window.size();
-            canvas.nwg_canvas().set_size(x - 101, y - 1);
+            let old_dims = canvas.get_dimensions().screen_dims.cast();
+            let window_dims = Point::from(self.window.size());
+            let new_dims = window_dims - Point::new(101, 1);
+            canvas.nwg_canvas().set_size(new_dims.x, new_dims.y);
             canvas.resize();
-            canvas.render();
+            if new_dims.x > old_dims.x || new_dims.y > old_dims.y {
+                canvas.render()
+            }
         }
     }
     fn exit(&self) {
