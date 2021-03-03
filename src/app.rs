@@ -32,7 +32,6 @@ pub struct AppBuilder;
 
 pub struct AppInner {
     window: nwg::Window,
-    grid: nwg::GridLayout,
     pub canvas: OnceCell<Canvas>,
     canvas_handler: OnceCell<nwg::EventHandler>,
     paste_image_btn: nwg::Button,
@@ -169,11 +168,6 @@ impl AppInner {
 
         let canvas = Canvas::new(&self.window);
 
-        self.grid
-            .add_child_item(nwg::GridLayoutItem::new(canvas.handle(), 0, 0, 3, 9));
-
-        canvas.resize();
-
         let ui = Rc::downgrade(&self);
 
         let f = move |evt, evt_data, handle| {
@@ -199,10 +193,14 @@ impl AppInner {
             .set(canvas)
             .ok()
             .expect("canvas was already initialized");
+
+        self.handle_resize();
     }
 
-    fn resize_canvas(&self) {
+    fn handle_resize(&self) {
         if let Some(canvas) = self.canvas.get() {
+            let (x, y) = self.window.size();
+            canvas.nwg_canvas().set_size(x - 101, y - 1);
             canvas.resize();
             canvas.render();
         }
@@ -362,63 +360,48 @@ impl nwg::NativeUi<App> for AppBuilder {
             .build(&mut *canvas)?;
         */
 
-        let make_button = |text| {
+        let make_button = |text, x, y| {
             let mut btn = Default::default();
             nwg::Button::builder()
                 .parent(&window)
                 .text(text)
+                .position((x, y))
                 .build(&mut btn)?;
             Ok(btn)
         };
 
-        let paste_image_btn = make_button("bg")?;
-        let clear_drawing_btn = make_button("clear")?;
-        let copy_drawing_btn = make_button("copy")?;
-        let drawing_color_btn = make_button("drawing color")?;
-        let shape_color_btn = make_button("shape color")?;
+        let paste_image_btn = make_button("bg", 0, 0)?;
+        let clear_drawing_btn = make_button("clear", 0, 25)?;
+        let copy_drawing_btn = make_button("copy", 0, 50)?;
+        let drawing_color_btn = make_button("drawing color", 0, 75)?;
+        let shape_color_btn = make_button("shape color", 0, 100)?;
 
-        let make_radio_button = |text| {
+        let make_radio_button = |text, x, y| {
             let mut btn = Default::default();
             nwg::RadioButton::builder()
                 .parent(&window)
                 .text(text)
+                .position((x, y))
                 .build(&mut btn)?;
             Ok(btn)
         };
 
-        let move_mode_btn = make_radio_button("move")?;
-        let line_mode_btn = make_radio_button("line")?;
-        let bezier_mode_btn = make_radio_button("bezier")?;
+        let move_mode_btn = make_radio_button("move", 0, 150)?;
+        let line_mode_btn = make_radio_button("line", 0, 175)?;
+        let bezier_mode_btn = make_radio_button("bezier", 0, 200)?;
 
         let mut shape_alpha_slider = Default::default();
         nwg::TrackBar::builder()
             .parent(&window)
+            .position((0, 125))
             .build(&mut shape_alpha_slider)?;
         shape_alpha_slider.set_pos(50);
-
-        let mut grid = Default::default();
-        nwg::GridLayout::builder()
-            .parent(&window)
-            .max_column(Some(4))
-            .max_row(Some(9))
-            //.child_item(nwg::GridLayoutItem::new(&canvas, 0, 0, 3, 8))
-            .child_item(nwg::GridLayoutItem::new(&paste_image_btn, 3, 0, 1, 1))
-            .child_item(nwg::GridLayoutItem::new(&clear_drawing_btn, 3, 1, 1, 1))
-            .child_item(nwg::GridLayoutItem::new(&copy_drawing_btn, 3, 2, 1, 1))
-            .child_item(nwg::GridLayoutItem::new(&drawing_color_btn, 3, 3, 1, 1))
-            .child_item(nwg::GridLayoutItem::new(&shape_color_btn, 3, 4, 1, 1))
-            .child_item(nwg::GridLayoutItem::new(&shape_alpha_slider, 3, 5, 1, 1))
-            .child_item(nwg::GridLayoutItem::new(&move_mode_btn, 3, 6, 1, 1))
-            .child_item(nwg::GridLayoutItem::new(&line_mode_btn, 3, 7, 1, 1))
-            .child_item(nwg::GridLayoutItem::new(&bezier_mode_btn, 3, 8, 1, 1))
-            .build(&mut grid)?;
 
         let mut color_dialog = Default::default();
         nwg::ColorDialog::builder().build(&mut color_dialog)?;
 
         let inner = Rc::new(AppInner {
             window,
-            grid,
             canvas,
             canvas_handler: OnceCell::new(),
             paste_image_btn,
@@ -451,7 +434,7 @@ impl nwg::NativeUi<App> for AppBuilder {
                 match evt {
                     Event::OnInit => AppInner::show(ui),
                     Event::OnResize | Event::OnWindowMaximize | Event::OnResizeEnd => {
-                        ui.resize_canvas()
+                        ui.handle_resize()
                     }
                     Event::OnWindowClose => ui.exit(),
                     Event::OnKeyPress | Event::OnKeyRelease => {
@@ -472,6 +455,10 @@ impl nwg::NativeUi<App> for AppBuilder {
                                 _ => (),
                             }
                         }
+                    }
+                    Event::OnMinMaxInfo => {
+                        let min_max_info = evt_data.on_min_max();
+                        min_max_info.set_min_size(200, 200);
                     }
                     _ => (),
                 }

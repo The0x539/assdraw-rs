@@ -94,6 +94,7 @@ fn make_extern_canvas<W: Into<nwg::ControlHandle>>(parent: W) -> nwg::ExternCanv
     let mut c = nwg::ExternCanvas::default();
     nwg::ExternCanvas::builder()
         .parent(Some(parent.into()))
+        .position((100, 0))
         .build(&mut c)
         .expect("Failed to build nwg::ExternCanvas");
     c
@@ -103,6 +104,9 @@ fn make_extern_canvas<W: Into<nwg::ControlHandle>>(parent: W) -> nwg::ExternCanv
 impl OpenGlCanvas {
     pub fn handle(&self) -> &nwg::ControlHandle {
         &self.canvas.handle
+    }
+    pub fn nwg_canvas(&self) -> &nwg::ExternCanvas {
+        &self.canvas
     }
 
     pub fn new<W: Into<nwg::ControlHandle>>(parent: W) -> Self {
