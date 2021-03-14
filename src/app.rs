@@ -111,7 +111,8 @@ impl AppInner {
 
     fn add_point_at_cursor(&self) {
         let point = self.get_point_at_cursor();
-        self.get_canvas().with_drawing(|drawing| {
+        let canvas = self.get_canvas();
+        canvas.with_drawing(|drawing| {
             let cmd = if drawing.points().is_empty() {
                 Command::Move(point)
             } else {
@@ -129,10 +130,13 @@ impl AppInner {
             };
             drawing.push(cmd);
         });
+        canvas.render();
     }
 
     fn clear_drawing(&self) {
-        self.get_canvas().clear_drawing();
+        let canvas = self.get_canvas();
+        canvas.clear_drawing();
+        canvas.render();
     }
 
     fn copy_drawing(&self) -> std::fmt::Result {
@@ -218,7 +222,8 @@ impl AppInner {
             nwg::EventData::OnMouseWheel(i) => i / 120,
             _ => panic!(),
         };
-        self.get_canvas().update_dimensions(|dims| {
+        let canvas = self.get_canvas();
+        canvas.update_dimensions(|dims| {
             // this is the same code as get_point_at_cursor
             // TODO: figure out how to avoid RefCell rules preventing the use of that function here
             let mouse_pos = self.cursor_pos().cast::<f32>();
@@ -235,7 +240,8 @@ impl AppInner {
 
             dims.scale = new_scale;
             dims.scene_pos = new_scene_pos;
-        })
+        });
+        canvas.render();
     }
     fn mouse_move(&self) {
         if !self.is_dragging() {
@@ -247,16 +253,22 @@ impl AppInner {
         let dxy1 = self.cursor_pos();
         let dxy = dxy1 - dxy0;
 
+        let canvas = self.get_canvas();
+        let mut should_redraw = false;
         if self.right_dragging.get() {
-            self.get_canvas().update_dimensions(|dims| {
+            canvas.update_dimensions(|dims| {
                 dims.scene_pos = xy0 - (dxy.cast::<f32>() / dims.scale);
-            })
+            });
+            should_redraw = true;
         }
         if self.left_dragging.get() {
             if let Some(i) = self.dragged_point.get() {
-                self.get_canvas()
-                    .with_drawing(|drawing| drawing.points_mut()[i] = self.get_point_at_cursor());
+                canvas.with_drawing(|drawing| drawing.points_mut()[i] = self.get_point_at_cursor());
+                should_redraw = true;
             }
+        }
+        if should_redraw {
+            canvas.render();
         }
     }
     fn mouse_press(&self, event: nwg::MousePressEvent) {
@@ -290,6 +302,8 @@ impl AppInner {
                 self.dragged_point.set(drag_idx);
 
                 self.left_dragging.set(true);
+
+                canvas.render();
             }
             nwg::MousePressEvent::MousePressLeftUp => {
                 self.left_dragging.set(false);
@@ -321,7 +335,9 @@ impl AppInner {
         };
         let cursor = std::io::Cursor::new(&buf[..]);
         let img = image::codecs::bmp::BmpDecoder::new(cursor).unwrap();
-        self.get_canvas().set_image(img);
+        let canvas = self.get_canvas();
+        canvas.set_image(img);
+        canvas.render();
     }
 
     fn choose_color(&self, for_drawing: bool) {
@@ -329,16 +345,19 @@ impl AppInner {
             return;
         }
         let rgb = self.color_dialog.color();
+        let canvas = self.get_canvas();
         if for_drawing {
-            self.get_canvas().recolor_drawing(rgb);
+            canvas.recolor_drawing(rgb);
         } else {
-            self.get_canvas().recolor_shape(rgb);
+            canvas.recolor_shape(rgb);
         }
+        canvas.render();
     }
 
     fn update_shape_alpha(&self) {
-        self.get_canvas()
-            .set_shape_alpha(self.shape_alpha_slider.pos() as u8);
+        let canvas = self.get_canvas();
+        canvas.set_shape_alpha(self.shape_alpha_slider.pos() as u8);
+        canvas.render();
     }
 }
 
