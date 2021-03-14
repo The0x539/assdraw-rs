@@ -144,17 +144,30 @@ impl AppInner {
             let mut data = Vec::new();
             let mut last_kind = None;
             for cmd in drawing.commands() {
+                use pretty_dtoa::{ftoa, FmtFloatConfig};
+
+                let cfg = FmtFloatConfig::default()
+                    .max_decimal_digits(2)
+                    .force_no_e_notation()
+                    .ignore_extremes(3);
+
+                macro_rules! f {
+                    ($fmt:literal, $($point:expr),*) => {
+                        format!($fmt, $(ftoa($point.x, cfg), ftoa($point.y, cfg)),*)
+                    }
+                }
+
                 let element = match cmd {
                     Command::Move(p) | Command::Line(p) if last_kind == Some(cmd.kind()) => {
-                        format!("{} {}", p.x, p.y)
+                        f!("{} {}", p)
                     }
-                    Command::Move(p) => format!("m {} {}", p.x, p.y),
-                    Command::Line(p) => format!("l {} {}", p.x, p.y),
+                    Command::Move(p) => f!("m {} {}", p),
+                    Command::Line(p) => f!("l {} {}", p),
                     Command::Bezier(p1, p2, p3) => {
                         if last_kind == Some(CommandKind::Bezier) {
-                            format!("{} {} {} {} {} {}", p1.x, p1.y, p2.x, p2.y, p3.x, p3.y)
+                            f!("{} {} {} {} {} {}", p1, p2, p3)
                         } else {
-                            format!("b {} {} {} {} {} {}", p1.x, p1.y, p2.x, p2.y, p3.x, p3.y)
+                            f!("b {} {} {} {} {} {}", p1, p2, p3)
                         }
                     }
                 };

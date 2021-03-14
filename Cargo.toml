@@ -21,6 +21,7 @@ winapi = "0.3.9"
 num-traits = "0.2.14"
 either = "1.6.1"
 byte_set = "0.1.3"
+pretty_dtoa = "0.1.0"
 
 [profile.release]
 lto = true
